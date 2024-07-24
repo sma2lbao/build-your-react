@@ -282,6 +282,11 @@
       "reviewCategory": "production"
     },
     {
+      "packageName": "react-dom-bindings",
+      "projectFolder": "packages/react-dom-bindings",
+      "reviewCategory": "production"
+    },
+    {
       "packageName": "react-reconciler",
       "projectFolder": "packages/react-reconciler",
       "reviewCategory": "production"

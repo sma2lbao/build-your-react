@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -10,6 +15,9 @@
   },
   "devDependencies": {
     "typescript": "^5.2.2",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "@types/node": "~20.14.12",
+    "vite-plugin-dts": "~4.0.0-beta.1",
+    "shared": "workspace:*"
   }
 }
