@@ -300,6 +300,11 @@
       "packageName": "shared",
       "projectFolder": "packages/shared",
       "reviewCategory": "production"
+    },
+    {
+      "packageName": "react-dom-test",
+      "projectFolder": "fixtures/react-dom-test",
+      "reviewCategory": "test"
     }
   ]
 }

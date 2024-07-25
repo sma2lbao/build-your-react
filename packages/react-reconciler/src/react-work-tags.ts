@@ -18,7 +18,7 @@ export const FunctionComponent = 0;
 export const ClassComponent = 1;
 
 /**
- * 原生组件
+ * 宿主根节点
  */
 export const HostRoot = 3;
 
