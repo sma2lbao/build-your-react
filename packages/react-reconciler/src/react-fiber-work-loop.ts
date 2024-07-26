@@ -1,14 +1,22 @@
 import { beginWork } from "./react-fiber-begin-work";
+import { completeWork } from "./react-fiber-complete-work";
 import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
 import { ensureRootIsScheduled } from "./react-fiber-root-scheduler";
 import { Fiber, FiberRoot } from "./react-internal-types";
+import { shouldYield } from "./scheduler";
 
 // 正在执行的FiberRoot
 let workInProgressRoot: FiberRoot | null = null;
-// 正在执行的lanes
-let workInProgressRootRenderLanes: Lanes = NoLanes;
+
 // 正在执行的Fiber
 let workInProgress: Fiber | null = null;
+
+// 正在执行的lanes
+let workInProgressRootRenderLanes: Lanes = NoLanes;
+
+// begin/complete 阶段处理的优先级.
+export let entangledRenderLanes: Lanes = NoLanes;
+
 /**
  * 调度更新
  * @param root

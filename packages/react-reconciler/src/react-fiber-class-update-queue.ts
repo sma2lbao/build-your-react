@@ -1,3 +1,4 @@
+import { enqueueConcurrentClassUpdate } from "./react-fiber-concurrent-updates";
 import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 

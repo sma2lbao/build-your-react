@@ -1,10 +1,16 @@
 import { scheduleMicrotask } from "react-fiber-config";
 import { FiberRoot } from "./react-internal-types";
 import { Lane, NoLanes } from "./react-fiber-lane";
+import { scheduleCallback as Scheduler_scheduleCallback } from "./scheduler";
 import {
   getWorkInProgressRoot,
   getWorkInProgressRootRenderLanes,
+  performConcurrentWorkOnRoot,
 } from "./react-fiber-work-loop";
+
+import { PriorityLevel } from "scheduler";
+
+export type RenderTaskFn = (didTimeout: boolean) => RenderTaskFn | null;
 
 /**
  * 用于防止调度冗余的微任务。
