@@ -50,3 +50,5 @@ class ReactDOMRoot {
     }
   }
 }
+
+export default {};

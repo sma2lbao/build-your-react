@@ -41,3 +41,24 @@ function ReactElement(type: any, key: string | null, ref: any, props: any) {
 
   return element;
 }
+
+export function jsx(type: any, config: any, maybeKey: any) {
+  let key = null;
+  let ref = null;
+
+  if (maybeKey !== undefined) {
+    key = "" + maybeKey;
+  }
+
+  const { key: _key, ref: _ref, ...rest } = config || {};
+  if (_key) {
+    key = "" + _key;
+  }
+  if (_ref) {
+    ref = "" + _ref;
+  }
+
+  const props: Record<string, any> = { ...rest };
+
+  return ReactElement(type, key, ref, props);
+}

@@ -302,9 +302,9 @@
       "reviewCategory": "production"
     },
     {
-      "packageName": "react-dom-test",
-      "projectFolder": "fixtures/react-dom-test",
-      "reviewCategory": "test"
+      "packageName": "react-site",
+      "projectFolder": "site",
+      "reviewCategory": "production"
     }
   ]
 }
