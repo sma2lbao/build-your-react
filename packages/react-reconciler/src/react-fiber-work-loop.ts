@@ -1,9 +1,31 @@
 import { beginWork } from "./react-fiber-begin-work";
 import { completeWork } from "./react-fiber-complete-work";
-import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
-import { ensureRootIsScheduled } from "./react-fiber-root-scheduler";
+import {
+  Lane,
+  Lanes,
+  NoLanes,
+  getNextLanes,
+  includesBlockingLane,
+  includesExpiredLane,
+  markRootUpdated,
+} from "./react-fiber-lane";
+import {
+  RenderTaskFn,
+  ensureRootIsScheduled,
+  getContinuationForRoot,
+} from "./react-fiber-root-scheduler";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import { shouldYield } from "./scheduler";
+
+type RootExitStatus = typeof RootInProgress;
+
+const RootInProgress = 0;
+const RootFatalErrored = 1;
+const RootErrored = 2;
+const RootSuspended = 3;
+const RootSuspendedWithDelay = 4;
+const RootCompleted = 5;
+const RootDidNotComplete = 6;
 
 // 正在执行的FiberRoot
 let workInProgressRoot: FiberRoot | null = null;
@@ -13,6 +35,8 @@ let workInProgress: Fiber | null = null;
 
 // 正在执行的lanes
 let workInProgressRootRenderLanes: Lanes = NoLanes;
+
+let workInProgressRootExitStatus: RootExitStatus = RootInProgress;
 
 // begin/complete 阶段处理的优先级.
 export let entangledRenderLanes: Lanes = NoLanes;
@@ -28,6 +52,8 @@ export function scheduleUpdateOnFiber(
   fiber: Fiber,
   lane: Lane
 ) {
+  markRootUpdated(root, lane);
+
   ensureRootIsScheduled(root);
 }
 
@@ -40,7 +66,46 @@ export function performConcurrentWorkOnRoot(
   root: FiberRoot,
   didTimeout: boolean
 ): RenderTaskFn | null {
-  renderRootConcurrent(root);
+  const originalCallbackNode = root.callbackNode;
+
+  let lanes = getNextLanes(
+    root,
+    root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
+  );
+
+  const shouldTimeSlice =
+    !includesBlockingLane(root, lanes) &&
+    !includesExpiredLane(root, lanes) &&
+    !didTimeout;
+  let exitStatus = shouldTimeSlice
+    ? renderRootConcurrent(root, lanes)
+    : renderRootSync(root, lanes);
+
+  ensureRootIsScheduled(root);
+
+  return getContinuationForRoot(root, originalCallbackNode);
+}
+
+function renderRootSync(root: FiberRoot, lanes: Lanes) {
+  do {
+    try {
+      workLoopSync();
+      break;
+    } catch (error) {}
+  } while (true);
+
+  if (workInProgress !== null) {
+    // This is a sync render, so we should have finished the whole tree.
+    throw new Error(
+      "Cannot commit an incomplete root. This error is likely caused by a " +
+        "bug in React. Please file an issue."
+    );
+  }
+
+  workInProgressRoot = null;
+  workInProgressRootRenderLanes = NoLanes;
+
+  return workInProgressRootExitStatus;
 }
 
 function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
@@ -52,6 +117,12 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
       console.error("performConcurrentWorkOnRoot thrownValue: ", thrownValue);
     }
   } while (true);
+}
+
+function workLoopSync() {
+  while (workInProgress !== null) {
+    performUnitOfWork(workInProgress);
+  }
 }
 
 function workLoopConcurrent() {

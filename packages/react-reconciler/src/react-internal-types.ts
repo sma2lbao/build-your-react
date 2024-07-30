@@ -1,6 +1,6 @@
 import { Container } from "react-fiber-config";
 import { Flags } from "./react-fiber-flags";
-import { Lanes } from "./react-fiber-lane";
+import { Lane, Lanes } from "./react-fiber-lane";
 import { RootTag } from "./react-root-tags";
 import { WorkTag } from "./react-work-tags";
 import { TypeOfMode } from "./react-type-of-mode";
@@ -123,6 +123,9 @@ interface BaseFiberRootProperties {
    * 用于创建一个链表，该链表表示所有在其上安排了待处理任务的根。
    */
   next: FiberRoot | null;
+
+  callbackNode: any;
+  callbackPriority: Lane;
 
   pendingLanes: Lanes;
   suspendedLanes: Lanes;
