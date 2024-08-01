@@ -11,9 +11,12 @@ import {
 } from "./react-fiber-lane";
 import {
   scheduleCallback as Scheduler_scheduleCallback,
-  cancelCallback,
+  cancelCallback as Schedule_cancelCallback,
   now,
+  ImmediatePriority as ImmediateSchedulerPriority,
+  UserBlockingPriority as UserBlockingSchedulerPriority,
   NormalPriority as NormalSchedulerPriority,
+  IdlePriority as IdleSchedulerPriority,
 } from "./scheduler";
 import {
   getWorkInProgressRoot,
@@ -49,6 +52,10 @@ let didScheduleMicrotask: boolean = false;
  */
 let mightHavePendingSyncWork: boolean = false;
 
+/**
+ * 调度FiberRoot。可能存在微任务
+ * @param root
+ */
 export function ensureRootIsScheduled(root: FiberRoot): void {
   if (root === lastScheduledRoot || root.next !== null) {
   } else {
@@ -188,4 +195,10 @@ function scheduleCallback(
   callback: RenderTaskFn
 ) {
   return Scheduler_scheduleCallback(priorityLevel, callback);
+}
+
+function cancelCallback(callbackNode: any) {
+  if (callbackNode !== null) {
+    Schedule_cancelCallback(callbackNode);
+  }
 }

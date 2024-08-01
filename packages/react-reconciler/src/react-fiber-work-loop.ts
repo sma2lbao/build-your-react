@@ -1,8 +1,13 @@
+import { eventPriorityToLane } from "./react-event-priorities";
+import { createWorkInProgress } from "./react-fiber";
 import { beginWork } from "./react-fiber-begin-work";
+import { commitMutationEffects } from "./react-fiber-commit-work";
 import { completeWork } from "./react-fiber-complete-work";
+import { finishQueueingConcurrentUpdates } from "./react-fiber-concurrent-updates";
 import {
   Lane,
   Lanes,
+  NoLane,
   NoLanes,
   getNextLanes,
   includesBlockingLane,
@@ -16,8 +21,16 @@ import {
 } from "./react-fiber-root-scheduler";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import { shouldYield } from "./scheduler";
+import { resolveUpdatePriority } from "react-fiber-config";
 
-type RootExitStatus = typeof RootInProgress;
+type RootExitStatus =
+  | typeof RootInProgress
+  | typeof RootFatalErrored
+  | typeof RootErrored
+  | typeof RootSuspended
+  | typeof RootSuspendedWithDelay
+  | typeof RootCompleted
+  | typeof RootDidNotComplete;
 
 const RootInProgress = 0;
 const RootFatalErrored = 1;
@@ -77,13 +90,30 @@ export function performConcurrentWorkOnRoot(
     !includesBlockingLane(root, lanes) &&
     !includesExpiredLane(root, lanes) &&
     !didTimeout;
-  let exitStatus = shouldTimeSlice
-    ? renderRootConcurrent(root, lanes)
-    : renderRootSync(root, lanes);
+  // let exitStatus = shouldTimeSlice
+  //   ? renderRootConcurrent(root, lanes)
+  //   : renderRootSync(root, lanes);
+  let exitStatus = renderRootConcurrent(root, lanes);
 
-  ensureRootIsScheduled(root);
+  if (exitStatus !== RootInProgress) {
+    let renderWasConcurrent = shouldTimeSlice;
 
-  return getContinuationForRoot(root, originalCallbackNode);
+    do {
+      if (exitStatus === RootDidNotComplete) {
+      } else {
+        const finishedWork: Fiber = root.current.alternate!;
+
+        root.finishedWork = finishedWork;
+        root.finishedLanes = lanes;
+        finishConcurrentRender(root, exitStatus, finishedWork, lanes);
+      }
+      break;
+    } while (true);
+  }
+
+  // ensureRootIsScheduled(root);
+
+  // return getContinuationForRoot(root, originalCallbackNode);
 }
 
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
@@ -109,6 +139,10 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 }
 
 function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
+  if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
+    prepareFreshStack(root, lanes);
+  }
+
   do {
     try {
       workLoopConcurrent();
@@ -117,6 +151,15 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
       console.error("performConcurrentWorkOnRoot thrownValue: ", thrownValue);
     }
   } while (true);
+
+  if (workInProgress !== null) {
+    return RootInProgress;
+  } else {
+    workInProgress = null;
+    workInProgressRootRenderLanes = NoLanes;
+
+    return workInProgressRootExitStatus;
+  }
 }
 
 function workLoopSync() {
@@ -126,15 +169,16 @@ function workLoopSync() {
 }
 
 function workLoopConcurrent() {
-  while (workInProgress !== null && !shouldYield()) {
+  // !shouldYield()
+  while (workInProgress !== null) {
     performUnitOfWork(workInProgress);
   }
 }
 
 function performUnitOfWork(unitOfWork: Fiber): void {
   const current = unitOfWork.alternate;
-
   const next = beginWork(current, unitOfWork, entangledRenderLanes);
+
   // 如果这没有产生新的任务。
   if (next === null) {
     completeUnitOfWork(unitOfWork);
@@ -169,6 +213,62 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
   } while (completedWork !== null);
 
   // dfs 执行完所有的 completedWork 后
+
+  if (workInProgressRootExitStatus === RootInProgress) {
+    workInProgressRootExitStatus = RootCompleted;
+  }
+}
+
+function finishConcurrentRender(
+  root: FiberRoot,
+  exitStatus: RootExitStatus,
+  finishedWork: Fiber,
+  lanes: Lanes
+) {
+  commitRootWhenReady(root, finishedWork, lanes);
+}
+
+function commitRootWhenReady(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  lanes: Lanes
+) {
+  commitRoot(root);
+}
+
+function commitRoot(root: FiberRoot) {
+  commitRootImpl(root);
+  return null;
+}
+
+function commitRootImpl(root: FiberRoot) {
+  const finishedWork = root.finishedWork!;
+  const lanes = root.finishedLanes;
+
+  root.finishedWork = null;
+  root.finishedLanes = NoLanes;
+  root.callbackNode = null;
+  root.callbackPriority = NoLane;
+  root.cancelPendingCommit = null;
+
+  commitMutationEffects(root, finishedWork, lanes);
+
+  return null;
+}
+
+function prepareFreshStack(root: FiberRoot, lanes: Lanes) {
+  root.finishedWork = null;
+  root.finishedLanes = NoLanes;
+
+  workInProgressRoot = root;
+  const rootWorkInProgress = createWorkInProgress(root.current, null);
+  workInProgress = rootWorkInProgress;
+  workInProgressRootRenderLanes = lanes;
+  workInProgressRootExitStatus = RootInProgress;
+
+  finishQueueingConcurrentUpdates();
+
+  return rootWorkInProgress;
 }
 
 export function getWorkInProgressRoot(): FiberRoot | null {
@@ -177,4 +277,8 @@ export function getWorkInProgressRoot(): FiberRoot | null {
 
 export function getWorkInProgressRootRenderLanes(): Lanes {
   return workInProgressRootRenderLanes;
+}
+
+export function requestUpdateLane(): Lane {
+  return eventPriorityToLane(resolveUpdatePriority());
 }

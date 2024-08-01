@@ -4,6 +4,11 @@ import { ConcurrentRoot, RootTag } from "./react-root-tags";
 import { NoLanes } from "./react-fiber-lane";
 import { createHostRootFiber } from "./react-fiber";
 import { initializeUpdateQueue } from "./react-fiber-class-update-queue";
+import { ReactNodeList } from "shared/react-types";
+
+export type RootState = {
+  element: any;
+};
 
 /**
  * 创建一个FiberRoot；并将 current 指向 宿主根fiber; 并让该fiber的stateNode属性指向 fiberRoot；
@@ -14,13 +19,20 @@ import { initializeUpdateQueue } from "./react-fiber-class-update-queue";
  */
 export function createFiberRoot(
   containerInfo: Container,
-  tag: RootTag
+  tag: RootTag,
+  initialChildren: ReactNodeList = null
 ): FiberRoot {
   const root = new FiberRootNode(containerInfo, tag);
 
   const uninitializedFiber = createHostRootFiber();
   root.current = uninitializedFiber;
   uninitializedFiber.stateNode = root;
+
+  const initialState: RootState = {
+    element: initialChildren,
+  };
+
+  uninitializedFiber.memoizedState = initialState;
 
   initializeUpdateQueue(uninitializedFiber);
 
@@ -45,6 +57,9 @@ class FiberRootNode implements Omit<FiberRoot, "current"> {
   finishedWork = null;
 
   next = null;
+
+  callbackNode = null;
+  callbackPriority = NoLanes;
 
   pendingLanes = NoLanes;
   suspendedLanes = NoLanes;

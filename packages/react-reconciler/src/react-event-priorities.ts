@@ -36,6 +36,10 @@ export function lanesToEventPriority(lanes: Lanes): EventPriority {
   return IdleEventPriority;
 }
 
+export function eventPriorityToLane(updatePriority: EventPriority): Lane {
+  return updatePriority;
+}
+
 export function isHigherEventPriority(
   a: EventPriority,
   b: EventPriority

@@ -1,5 +1,5 @@
 import { enqueueConcurrentClassUpdate } from "./react-fiber-concurrent-updates";
-import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
+import { Lane, Lanes, NoLane, NoLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 
 export const UpdateState = 0;
@@ -74,4 +74,166 @@ export function enqueueUpdate<State>(
   const sharedQueue: SharedQueue<State> = updateQueue.shared;
 
   return enqueueConcurrentClassUpdate(fiber, sharedQueue, update, lane);
+}
+
+export function cloneUpdateQueue<State>(
+  current: Fiber,
+  workInProgress: Fiber
+): void {
+  const queue: UpdateQueue<State> = workInProgress.updateQueue;
+  const currentQueue: UpdateQueue<State> = current.updateQueue;
+
+  if (queue === currentQueue) {
+    const clone: UpdateQueue<State> = {
+      baseState: currentQueue.baseState,
+      firstBaseUpdate: currentQueue.firstBaseUpdate,
+      lastBaseUpdate: currentQueue.lastBaseUpdate,
+      shared: currentQueue.shared,
+      callbacks: null,
+    };
+    workInProgress.updateQueue = clone;
+  }
+}
+
+/**
+ * TODO: 详解
+ * @param workInProgress
+ * @param props
+ * @param instance
+ * @param renderLanes
+ */
+export function processUpdateQueue<State>(
+  workInProgress: Fiber,
+  props: any,
+  instance: any,
+  renderLanes: Lanes
+): void {
+  const queue: UpdateQueue<State> = workInProgress.updateQueue;
+
+  let firstBaseUpdate = queue.firstBaseUpdate;
+  let lastBaseUpdate = queue.lastBaseUpdate;
+
+  let pendingQueue = queue.shared.pending;
+
+  if (pendingQueue !== null) {
+    queue.shared.pending = null;
+
+    const lastPendingUpdate = pendingQueue;
+    const firstPendingUpdate = lastPendingUpdate.next;
+    lastPendingUpdate.next = null;
+
+    if (lastBaseUpdate === null) {
+      firstBaseUpdate = firstPendingUpdate;
+    } else {
+      lastBaseUpdate.next = firstPendingUpdate;
+    }
+    lastBaseUpdate = lastPendingUpdate;
+
+    const current = workInProgress.alternate;
+    if (current !== null) {
+      const currentQueue: UpdateQueue<State> = current.updateQueue;
+      const currentLastBaseUpdate = currentQueue.lastBaseUpdate;
+      if (currentLastBaseUpdate !== lastBaseUpdate) {
+        if (currentLastBaseUpdate === null) {
+          currentQueue.firstBaseUpdate = firstPendingUpdate;
+        } else {
+          currentLastBaseUpdate.next = firstPendingUpdate;
+        }
+        currentQueue.lastBaseUpdate = lastPendingUpdate;
+      }
+    }
+  }
+
+  if (firstBaseUpdate !== null) {
+    let newState = queue.baseState;
+    let newLanes: Lanes = NoLanes;
+
+    let newBaseState = null;
+    let newFirstBaseUpdate = null;
+    let newLastBaseUpdate: Update<State> | null = null;
+
+    let update: Update<State> = firstBaseUpdate;
+    do {
+      const updateLane = update.lane;
+
+      if (newLastBaseUpdate !== null) {
+        const clone: Update<State> = {
+          lane: NoLane,
+          tag: update.tag,
+          payload: update.payload,
+          callback: null,
+          next: null,
+        };
+
+        newLastBaseUpdate = (newLastBaseUpdate as Update<State>).next = clone;
+      }
+
+      newState = getStateFromUpdate(
+        workInProgress,
+        queue,
+        update,
+        newState,
+        props,
+        instance
+      );
+
+      update = update.next as any;
+
+      if (update === null) {
+        pendingQueue = queue.shared.pending;
+        if (pendingQueue === null) {
+          break;
+        } else {
+          const lastPendingUpdate = pendingQueue;
+          const firstPendingUpdate = lastBaseUpdate?.next;
+          lastPendingUpdate.next = null;
+          update = firstPendingUpdate!;
+          queue.lastBaseUpdate = lastPendingUpdate;
+          queue.shared.pending = null;
+        }
+      }
+    } while (true);
+
+    if (newLastBaseUpdate === null) {
+      newBaseState = newState;
+    }
+
+    queue.baseState = newBaseState as State;
+    queue.firstBaseUpdate = newFirstBaseUpdate;
+    queue.lastBaseUpdate = newLastBaseUpdate;
+
+    if (firstBaseUpdate === null) {
+      queue.shared.lanes = NoLanes;
+    }
+
+    workInProgress.lanes = newLanes;
+    workInProgress.memoizedState = newState;
+  }
+}
+
+function getStateFromUpdate<State>(
+  workInProgress: Fiber,
+  queue: UpdateQueue<State>,
+  update: Update<State>,
+  prevState: State,
+  nextProps: any,
+  instance: any
+) {
+  switch (update.tag) {
+    case ReplaceState: {
+      const payload = update.payload;
+      const nextState = payload.call(instance, prevState, nextProps);
+      return nextState;
+    }
+    case UpdateState: {
+      const payload = update.payload;
+      let partialState = payload;
+      if (partialState == null) {
+        return prevState;
+      }
+      return Object.assign({}, prevState, partialState);
+    }
+  }
+
+  return prevState;
 }

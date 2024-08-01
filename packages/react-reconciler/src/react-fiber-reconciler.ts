@@ -5,7 +5,10 @@ import { Container } from "react-fiber-config";
 import { createFiberRoot } from "./react-fiber-root";
 import { RootTag } from "./react-root-tags";
 import { createUpdate, enqueueUpdate } from "./react-fiber-class-update-queue";
-import { scheduleUpdateOnFiber } from "./react-fiber-work-loop";
+import {
+  requestUpdateLane,
+  scheduleUpdateOnFiber,
+} from "./react-fiber-work-loop";
 
 type OpaqueRoot = FiberRoot;
 
@@ -15,7 +18,7 @@ export function updateContainer(
   parentComponent?: React$Component<any, any>
 ): Lane {
   const current = container.current;
-  const lane = 1;
+  const lane = requestUpdateLane();
   updateContainerImpl(current, lane, element, container, parentComponent);
   return lane;
 }
@@ -42,7 +45,5 @@ export function createContainer(
   containerInfo: Container,
   tag: RootTag
 ): OpaqueRoot {
-  const initialChildren = null;
-
   return createFiberRoot(containerInfo, tag);
 }

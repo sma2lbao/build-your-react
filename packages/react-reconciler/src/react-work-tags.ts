@@ -5,6 +5,7 @@ export type WorkTag =
   | typeof FunctionComponent
   | typeof ClassComponent
   | typeof HostRoot
+  | typeof HostComponent
   | typeof HostText;
 
 /**
@@ -18,9 +19,14 @@ export const FunctionComponent = 0;
 export const ClassComponent = 1;
 
 /**
- * 宿主根节点
+ * 根节点
  */
 export const HostRoot = 3;
+
+/**
+ * 宿主组件
+ */
+export const HostComponent = 5;
 
 /**
  * 字符串

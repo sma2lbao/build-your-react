@@ -1,5 +1,5 @@
 import { NoFlags } from "./react-fiber-flags";
-import { NoLanes } from "./react-fiber-lane";
+import { Lanes, NoLanes } from "./react-fiber-lane";
 import { Fiber } from "./react-internal-types";
 import {
   ConcurrentMode,
@@ -7,7 +7,8 @@ import {
   StrictLegacyMode,
   TypeOfMode,
 } from "./react-type-of-mode";
-import { HostRoot, WorkTag } from "./react-work-tags";
+import { HostComponent, HostRoot, HostText, WorkTag } from "./react-work-tags";
+import { ReactElement } from "shared/react-element-type";
 
 export function createHostRootFiber(): Fiber {
   let mode = ConcurrentMode;
@@ -15,6 +16,106 @@ export function createHostRootFiber(): Fiber {
   mode |= StrictLegacyMode | StrictEffectsMode;
 
   return createFiber(HostRoot, null, null, mode);
+}
+
+export function createFiberFromText(
+  content: string,
+  mode: TypeOfMode,
+  lanes: Lanes
+): Fiber {
+  const fiber = createFiber(HostText, content, null, mode);
+
+  fiber.lanes = lanes;
+
+  return fiber;
+}
+
+export function createFiberFromElement(
+  element: ReactElement,
+  mode: TypeOfMode,
+  lanes: Lanes
+) {
+  let owner = null;
+
+  const type = element.type;
+  const key = element.key;
+  const pendingProps = element.props;
+  const fiber = createFiberFromTypeAndProps(
+    type,
+    key,
+    pendingProps,
+    owner,
+    mode,
+    lanes
+  );
+
+  return fiber;
+}
+
+export function createFiberFromTypeAndProps(
+  type: any, // React$ElementType
+  key: string | null,
+  pendingProps: any,
+  owner: Fiber | null,
+  mode: TypeOfMode,
+  lanes: Lanes
+): Fiber {
+  let fiberTag: WorkTag;
+  let resolvedType = type;
+  if (typeof type === "string") {
+    fiberTag = HostComponent;
+  }
+
+  const fiber = createFiber(fiberTag!, pendingProps, key, mode);
+  fiber.elementType = type;
+  fiber.type = resolvedType;
+  fiber.lanes = lanes;
+
+  return fiber;
+}
+
+export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
+  /*
+   * 复用current属性非常重要，在渲染阶段 根Fiber(HostRoot)也会有current树
+   */
+  let workInProgress = current.alternate;
+
+  if (workInProgress === null) {
+    workInProgress = createFiber(
+      current.tag,
+      pendingProps,
+      current.key,
+      current.mode
+    );
+    workInProgress.elementType = current.elementType;
+    workInProgress.type = current.type;
+    workInProgress.stateNode = current.stateNode;
+
+    workInProgress.alternate = current;
+    current.alternate = workInProgress;
+  } else {
+    workInProgress.pendingProps = pendingProps;
+    workInProgress.type = current.type;
+
+    workInProgress.flags = NoFlags;
+
+    workInProgress.subtreeFlags = NoFlags;
+    workInProgress.deletions = null;
+  }
+
+  workInProgress.flags = current.flags;
+  workInProgress.childLanes = current.childLanes;
+  workInProgress.lanes = current.lanes;
+
+  workInProgress.child = current.child;
+  workInProgress.memoizedProps = current.memoizedProps;
+  workInProgress.memoizedState = current.memoizedState;
+  workInProgress.updateQueue = current.updateQueue;
+
+  workInProgress.sibling = current.sibling;
+  workInProgress.index = current.index;
+
+  return workInProgress;
 }
 
 export function createFiber(

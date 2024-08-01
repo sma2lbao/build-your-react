@@ -106,6 +106,10 @@ export function includesBlockingLane(root: FiberRoot, lanes: Lanes): boolean {
   return (lanes & SyncDefaultLanes) !== NoLanes;
 }
 
+export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
+  return a | b;
+}
+
 function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {
   // const pendingSyncLanes = lanes & SyncUpdateLanes;
 

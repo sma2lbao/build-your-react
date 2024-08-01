@@ -27,7 +27,7 @@ export interface Fiber {
   type: any;
 
   /**
-   * 与该fiber相关联的状态。
+   * 与该fiber相关联的真实dom。
    */
   stateNode: any;
 
