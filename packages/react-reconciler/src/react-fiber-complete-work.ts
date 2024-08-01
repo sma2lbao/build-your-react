@@ -1,4 +1,8 @@
-import { createInstance, createTextInstance } from "react-fiber-config";
+import {
+  createInstance,
+  createTextInstance,
+  finalizeInitialChildren,
+} from "react-fiber-config";
 import { Lanes, NoLanes, mergeLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import { HostComponent, HostRoot, HostText } from "./react-work-tags";
@@ -50,6 +54,10 @@ export function completeWork(
         const instance = createInstance(type, newProps, rootContainerInstance);
 
         workInProgress.stateNode = instance;
+
+        if (finalizeInitialChildren(instance, type, newProps)) {
+          markUpdate(workInProgress);
+        }
       }
 
       bubbleProperties(workInProgress);

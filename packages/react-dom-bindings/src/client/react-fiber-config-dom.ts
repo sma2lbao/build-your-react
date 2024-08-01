@@ -1,5 +1,6 @@
 import { FiberRoot } from "react-reconciler/react-internal-types";
 import { COMMENT_NODE } from "./html-node-type";
+import { setInitialProperties } from "./react-dom-component";
 
 export { resolveUpdatePriority } from "./react-dom-update-priority";
 
@@ -46,6 +47,25 @@ export function createInstance(
   domElement = ownerDocument.createElement(type);
 
   return domElement;
+}
+
+export function finalizeInitialChildren(
+  domElement: Instance,
+  type: string,
+  props: Props
+): boolean {
+  setInitialProperties(domElement, type, props);
+  switch (type) {
+    case "button":
+    case "input":
+    case "select":
+    case "textarea":
+      return !!props.autoFocus;
+    case "img":
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function shouldSetTextContent(type: string, props: Props): boolean {
