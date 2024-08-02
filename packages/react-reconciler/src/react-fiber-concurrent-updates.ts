@@ -122,3 +122,7 @@ function markUpdateLaneFromFiberToRoot(
     parent = parent.return;
   }
 }
+
+export function getConcurrentlyUpdatedLanes(): Lanes {
+  return concurrentlyUpdatedLanes;
+}

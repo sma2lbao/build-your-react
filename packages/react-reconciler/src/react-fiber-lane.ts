@@ -75,6 +75,28 @@ export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
   return nextLanes;
 }
 
+export function markRootFinished(root: FiberRoot, remainingLanes: Lanes) {
+  const noLongerPendingLanes = root.pendingLanes & ~remainingLanes;
+
+  root.pendingLanes = remainingLanes;
+
+  root.suspendedLanes = NoLanes;
+  root.pingedLanes = NoLanes;
+
+  root.expiredLanes &= remainingLanes;
+
+  root.entangledLanes &= remainingLanes;
+
+  let lanes = noLongerPendingLanes;
+
+  // while (lanes > 0) {
+  //   const index = pickArbitraryLaneIndex(lanes);
+  //   const lane = 1 << index;
+
+  //   lanes &= ~lane;
+  // }
+}
+
 export function getHighestPriorityLane(lanes: Lanes): Lane {
   return lanes & -lanes;
 }
@@ -108,6 +130,10 @@ export function includesBlockingLane(root: FiberRoot, lanes: Lanes): boolean {
 
 export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
   return a | b;
+}
+
+function pickArbitraryLaneIndex(lanes: Lanes) {
+  return 31 - Math.clz32(lanes);
 }
 
 function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {

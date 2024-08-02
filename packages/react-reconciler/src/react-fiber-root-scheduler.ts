@@ -58,6 +58,7 @@ let mightHavePendingSyncWork: boolean = false;
  */
 export function ensureRootIsScheduled(root: FiberRoot): void {
   if (root === lastScheduledRoot || root.next !== null) {
+    // 该 root 已被调度
   } else {
     if (lastScheduledRoot === null) {
       firstScheduledRoot = lastScheduledRoot = root;
@@ -148,6 +149,12 @@ function scheduleTaskForRootDuringMicrotask(
   );
 
   const existingCallbackNode = root.callbackNode;
+
+  if (nextLanes === NoLanes) {
+    root.callbackNode = null;
+    root.callbackPriority = NoLane;
+    return NoLane;
+  }
 
   if (includesSyncLane(nextLanes)) {
     if (existingCallbackNode !== null) {

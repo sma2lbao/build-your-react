@@ -3,7 +3,11 @@ import { createWorkInProgress } from "./react-fiber";
 import { beginWork } from "./react-fiber-begin-work";
 import { commitMutationEffects } from "./react-fiber-commit-work";
 import { completeWork } from "./react-fiber-complete-work";
-import { finishQueueingConcurrentUpdates } from "./react-fiber-concurrent-updates";
+import {
+  finishQueueingConcurrentUpdates,
+  getConcurrentlyUpdatedLanes,
+} from "./react-fiber-concurrent-updates";
+import { MutationMask, NoFlags } from "./react-fiber-flags";
 import {
   Lane,
   Lanes,
@@ -12,7 +16,9 @@ import {
   getNextLanes,
   includesBlockingLane,
   includesExpiredLane,
+  markRootFinished,
   markRootUpdated,
+  mergeLanes,
 } from "./react-fiber-lane";
 import {
   RenderTaskFn,
@@ -79,6 +85,7 @@ export function performConcurrentWorkOnRoot(
   root: FiberRoot,
   didTimeout: boolean
 ): RenderTaskFn | null {
+  debugger;
   const originalCallbackNode = root.callbackNode;
 
   let lanes = getNextLanes(
@@ -86,18 +93,19 @@ export function performConcurrentWorkOnRoot(
     root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
   );
 
+  if (lanes === NoLanes) {
+    return null;
+  }
+
   const shouldTimeSlice =
     !includesBlockingLane(root, lanes) &&
     !includesExpiredLane(root, lanes) &&
     !didTimeout;
-  // let exitStatus = shouldTimeSlice
-  //   ? renderRootConcurrent(root, lanes)
-  //   : renderRootSync(root, lanes);
-  let exitStatus = renderRootConcurrent(root, lanes);
+  let exitStatus = shouldTimeSlice
+    ? renderRootConcurrent(root, lanes)
+    : renderRootSync(root, lanes);
 
   if (exitStatus !== RootInProgress) {
-    let renderWasConcurrent = shouldTimeSlice;
-
     do {
       if (exitStatus === RootDidNotComplete) {
       } else {
@@ -111,17 +119,23 @@ export function performConcurrentWorkOnRoot(
     } while (true);
   }
 
-  // ensureRootIsScheduled(root);
+  ensureRootIsScheduled(root);
 
-  // return getContinuationForRoot(root, originalCallbackNode);
+  return getContinuationForRoot(root, originalCallbackNode);
 }
 
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
+  if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
+    prepareFreshStack(root, lanes);
+  }
+
   do {
     try {
       workLoopSync();
       break;
-    } catch (error) {}
+    } catch (error) {
+      console.error("renderRootSync thrownValue: ", error);
+    }
   } while (true);
 
   if (workInProgress !== null) {
@@ -134,6 +148,8 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
   workInProgressRoot = null;
   workInProgressRootRenderLanes = NoLanes;
+
+  finishQueueingConcurrentUpdates();
 
   return workInProgressRootExitStatus;
 }
@@ -247,11 +263,39 @@ function commitRootImpl(root: FiberRoot) {
 
   root.finishedWork = null;
   root.finishedLanes = NoLanes;
+
+  if (finishedWork === root.current) {
+    throw new Error(
+      "Cannot commit the same tree as before. This error is likely caused by " +
+        "a bug in React. Please file an issue."
+    );
+  }
+
   root.callbackNode = null;
   root.callbackPriority = NoLane;
   root.cancelPendingCommit = null;
 
-  commitMutationEffects(root, finishedWork, lanes);
+  let remainingLanes = mergeLanes(finishedWork.lanes, finishedWork.childLanes);
+  const concurrentlyUpdatedLanes = getConcurrentlyUpdatedLanes();
+  remainingLanes = mergeLanes(remainingLanes, concurrentlyUpdatedLanes);
+
+  markRootFinished(root, remainingLanes);
+
+  if (root === workInProgressRoot) {
+    workInProgressRoot = null;
+    workInProgress = null;
+    workInProgressRootRenderLanes = NoLanes;
+  }
+
+  const subtreeHasEffects =
+    (finishedWork.subtreeFlags & MutationMask) !== NoFlags;
+  const rootHasEffects = (finishedWork.flags & MutationMask) !== NoFlags;
+
+  if (subtreeHasEffects || rootHasEffects) {
+    commitMutationEffects(root, finishedWork, lanes);
+  } else {
+    root.current = finishedWork;
+  }
 
   return null;
 }
