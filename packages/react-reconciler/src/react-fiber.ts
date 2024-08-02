@@ -7,7 +7,13 @@ import {
   StrictLegacyMode,
   TypeOfMode,
 } from "./react-type-of-mode";
-import { HostComponent, HostRoot, HostText, WorkTag } from "./react-work-tags";
+import {
+  FunctionComponent,
+  HostComponent,
+  HostRoot,
+  HostText,
+  WorkTag,
+} from "./react-work-tags";
 import { ReactElement } from "shared/react-element-type";
 
 export function createHostRootFiber(): Fiber {
@@ -60,7 +66,7 @@ export function createFiberFromTypeAndProps(
   mode: TypeOfMode,
   lanes: Lanes
 ): Fiber {
-  let fiberTag: WorkTag;
+  let fiberTag: WorkTag = FunctionComponent;
   let resolvedType = type;
   if (typeof type === "string") {
     fiberTag = HostComponent;

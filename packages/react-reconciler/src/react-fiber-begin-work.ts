@@ -3,12 +3,18 @@ import { mountChildFibers, reconcileChildFibers } from "./react-child-fiber";
 import { Lanes } from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
-import { HostComponent, HostRoot, HostText } from "./react-work-tags";
+import {
+  FunctionComponent,
+  HostComponent,
+  HostRoot,
+  HostText,
+} from "./react-work-tags";
 import { pushHostContainer } from "./react-fiber-host-context";
 import {
   cloneUpdateQueue,
   processUpdateQueue,
 } from "./react-fiber-class-update-queue";
+import { renderWithHooks } from "./react-fiber-hooks";
 
 let didReceiveUpdate: boolean = false;
 
@@ -41,6 +47,19 @@ export function beginWork(
   switch (workInProgress.tag) {
     case HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
+    case FunctionComponent: {
+      debugger;
+      const Component = workInProgress.type;
+      const unresolvedProps = workInProgress.pendingProps;
+
+      return updateFunctionComponent(
+        current,
+        workInProgress,
+        Component,
+        unresolvedProps,
+        renderLanes
+      );
+    }
     case HostComponent:
       return updateHostComponent(current, workInProgress, renderLanes);
     case HostText:
@@ -99,6 +118,30 @@ function updateHostRoot(
   const nextState: RootState = workInProgress.memoizedState;
 
   const nextChildren = nextState.element;
+
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
+}
+
+function updateFunctionComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+) {
+  const nextChildren = renderWithHooks(
+    current,
+    workInProgress,
+    Component,
+    nextProps,
+    null,
+    renderLanes
+  );
+
+  if (current !== null && !didReceiveUpdate) {
+    // TODO 优化路径
+  }
 
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;

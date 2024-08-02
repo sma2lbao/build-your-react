@@ -1,13 +1,8 @@
 import { createRoot } from "react-dom/client";
+import App from "./App";
 
 createRoot(document.getElementById("root")!).render(
   <div>
-    <div>
-      <div>
-        <div>
-          <div>Vite + React</div>
-        </div>
-      </div>
-    </div>
+    <App />
   </div>
 );
