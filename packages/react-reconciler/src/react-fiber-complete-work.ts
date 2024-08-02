@@ -1,7 +1,10 @@
 import {
+  Instance,
+  appendInitialChild,
   createInstance,
   createTextInstance,
   finalizeInitialChildren,
+  supportsMutation,
 } from "react-fiber-config";
 import { Lanes, NoLanes, mergeLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
@@ -53,6 +56,7 @@ export function completeWork(
         const rootContainerInstance = getRootHostContainer();
         const instance = createInstance(type, newProps, rootContainerInstance);
 
+        appendAllChildren(instance, workInProgress);
         workInProgress.stateNode = instance;
 
         if (finalizeInitialChildren(instance, type, newProps)) {
@@ -126,4 +130,37 @@ function bubbleProperties(completedWork: Fiber) {
 
   completedWork.childLanes = newChildLanes;
   return didBailout;
+}
+
+/**
+ * 在首次渲染阶段直接将后代真实dom加到 HostRoot 上
+ */
+function appendAllChildren(parent: Instance, workInProgress: Fiber) {
+  if (supportsMutation) {
+    // 我们只创建了顶部的Fiber，但是我们需要递归它的子节点来找到所有的终端节点。
+    let node = workInProgress.child;
+    while (node !== null) {
+      if (node.tag === HostComponent || node.tag === HostText) {
+        appendInitialChild(parent, node.stateNode);
+      } else if (node.child !== null) {
+        node.child.return = node;
+        node = node.child;
+        continue;
+      }
+
+      if (node === workInProgress) {
+        return;
+      }
+
+      while (node.sibling === null) {
+        if (node.return === null || node.return === workInProgress) {
+          return;
+        }
+        node = node?.return;
+      }
+
+      node.sibling.return = node.return;
+      node = node.sibling;
+    }
+  }
 }

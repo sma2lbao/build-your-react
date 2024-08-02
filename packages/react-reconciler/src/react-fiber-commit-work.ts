@@ -16,7 +16,6 @@ export function commitMutationEffects(
   finishedWork: Fiber,
   committedLanes: Lanes
 ) {
-  debugger;
   commitMutationEffectsOnFiber(finishedWork, root, committedLanes);
 }
 

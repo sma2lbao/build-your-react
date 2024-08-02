@@ -21,6 +21,11 @@ export type Props = {
 
 const DOCUMENT_NODE = 9;
 
+/**
+ * 首次渲染支持
+ */
+export const supportsMutation = true;
+
 export const scheduleMicrotask = queueMicrotask;
 
 export function createTextInstance(
@@ -47,6 +52,13 @@ export function createInstance(
   domElement = ownerDocument.createElement(type);
 
   return domElement;
+}
+
+export function appendInitialChild(
+  parentInstance: Instance,
+  child: Instance | TextInstance
+): void {
+  parentInstance.appendChild(child);
 }
 
 export function finalizeInitialChildren(

@@ -38,7 +38,6 @@ function createChildReconciler(
     newChild: any,
     lanes: Lanes
   ): Fiber | null {
-    debugger;
     const firstChildFiber = reconcileChildFibersImpl(
       returnFiber,
       currentFirstChild,
