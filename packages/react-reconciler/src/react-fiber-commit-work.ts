@@ -9,7 +9,12 @@ import {
 import { MutationMask, Placement } from "./react-fiber-flags";
 import { Lanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
-import { HostComponent, HostRoot, HostText } from "./react-work-tags";
+import {
+  FunctionComponent,
+  HostComponent,
+  HostRoot,
+  HostText,
+} from "./react-work-tags";
 
 export function commitMutationEffects(
   root: FiberRoot,
@@ -28,17 +33,23 @@ function commitMutationEffectsOnFiber(
   const flags = finishedWork.flags;
 
   switch (finishedWork.tag) {
+    case HostRoot: {
+      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
+    case FunctionComponent: {
+      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+      commitReconciliationEffects(finishedWork);
+      return;
+    }
     case HostComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
       return;
     }
+
     case HostText: {
-      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-      commitReconciliationEffects(finishedWork);
-      return;
-    }
-    case HostRoot: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
       return;

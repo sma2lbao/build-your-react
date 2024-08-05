@@ -8,7 +8,12 @@ import {
 } from "react-fiber-config";
 import { Lanes, NoLanes, mergeLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
-import { HostComponent, HostRoot, HostText } from "./react-work-tags";
+import {
+  FunctionComponent,
+  HostComponent,
+  HostRoot,
+  HostText,
+} from "./react-work-tags";
 import {
   getRootHostContainer,
   popHostContainer,
@@ -34,6 +39,10 @@ export function completeWork(
       popHostContainer();
 
       updateHostContainer(current, workInProgress);
+      bubbleProperties(workInProgress);
+      return null;
+    }
+    case FunctionComponent: {
       bubbleProperties(workInProgress);
       return null;
     }
