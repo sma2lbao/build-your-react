@@ -6,7 +6,14 @@ import {
   insertBefore,
   insertInContainerBefore,
 } from "react-fiber-config";
-import { MutationMask, Placement } from "./react-fiber-flags";
+import {
+  BeforeMutationMask,
+  LayoutMask,
+  MutationMask,
+  NoFlags,
+  Placement,
+  Update,
+} from "./react-fiber-flags";
 import { Lanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
@@ -15,6 +22,13 @@ import {
   HostRoot,
   HostText,
 } from "./react-work-tags";
+import {
+  HookFlags,
+  Layout as HookLayout,
+  HasEffect as HookHasEffect,
+} from "./react-hook-effect-tags";
+
+let nextEffect: Fiber | null = null;
 
 export function commitMutationEffects(
   root: FiberRoot,
@@ -58,6 +72,142 @@ function commitMutationEffectsOnFiber(
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
       return;
+    }
+  }
+}
+
+export function commitBeforeMutationEffects(
+  root: FiberRoot,
+  firstChild: Fiber
+): boolean {
+  commitBeforeMutationEffects_begin();
+
+  return false;
+}
+
+function commitBeforeMutationEffects_begin() {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+
+    const child = fiber.child;
+    if (
+      (fiber.subtreeFlags & BeforeMutationMask) !== NoFlags &&
+      child !== null
+    ) {
+      child.return = fiber;
+      nextEffect = child;
+    } else {
+      commitBeforeMutationEffects_complete();
+    }
+  }
+}
+
+function commitBeforeMutationEffects_complete() {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+    try {
+      commitBeforeMutationEffectsOnFiber(fiber);
+    } catch (error) {
+      console.error(`commitBeforeMutationEffects_complete: `, fiber);
+    }
+
+    const sibling = fiber.sibling;
+    if (sibling !== null) {
+      sibling.return = fiber.return;
+      nextEffect = sibling;
+      return;
+    }
+
+    nextEffect = fiber.return;
+  }
+}
+
+function commitBeforeMutationEffectsOnFiber(finishedWork: Fiber) {
+  const current = finishedWork.alternate;
+  const flags = finishedWork.flags;
+
+  switch (finishedWork.tag) {
+    case FunctionComponent: {
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+export function commitLayoutEffects(
+  finishedWork: Fiber,
+  root: FiberRoot,
+  committedLanes: Lanes
+): void {
+  const current = finishedWork.alternate;
+
+  commitLayoutEffectOnFiber(root, current, finishedWork, committedLanes);
+}
+
+function commitLayoutEffectOnFiber(
+  finishedRoot: FiberRoot,
+  current: Fiber | null,
+  finishedWork: Fiber,
+  committedLanes: Lanes
+): void {
+  const flags = finishedWork.flags;
+
+  switch (finishedWork.tag) {
+    case HostRoot: {
+      recursivelyTraverseLayoutEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+      break;
+    }
+    case FunctionComponent: {
+      recursivelyTraverseLayoutEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+      if (flags & Update) {
+        commitHookLayoutEffects(finishedWork, HookLayout | HookHasEffect);
+      }
+      break;
+    }
+    case HostComponent: {
+      recursivelyTraverseLayoutEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+
+      if (current === null && flags & Update) {
+        commitHostComponentMount(finishedWork);
+      }
+
+      break;
+    }
+    default: {
+      recursivelyTraverseLayoutEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+      break;
+    }
+  }
+}
+
+function recursivelyTraverseLayoutEffects(
+  root: FiberRoot,
+  parentFiber: Fiber,
+  lanes: Lanes
+) {
+  if (parentFiber.subtreeFlags & LayoutMask) {
+    let child = parentFiber.child;
+    while (child !== null) {
+      const current = child.alternate;
+      commitLayoutEffectOnFiber(root, current, child, lanes);
+      child = child.sibling;
     }
   }
 }
@@ -114,6 +264,18 @@ function commitPlacement(finishedWork: Fiber): void {
       );
   }
 }
+
+function commitHookLayoutEffects(finishedWork: Fiber, hookFlags: HookFlags) {
+  try {
+    commitHookEffectListMount(hookFlags, finishedWork);
+  } catch (error) {
+    console.error("commitHookLayoutEffects: ", error);
+  }
+}
+
+function commitHostComponentMount(finishedWork: Fiber) {}
+
+function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {}
 
 /**
  * 获取上级最近的原生fiber组件。用来插入真实dom

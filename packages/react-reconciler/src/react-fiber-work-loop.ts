@@ -1,7 +1,11 @@
 import { eventPriorityToLane } from "./react-event-priorities";
 import { createWorkInProgress } from "./react-fiber";
 import { beginWork } from "./react-fiber-begin-work";
-import { commitMutationEffects } from "./react-fiber-commit-work";
+import {
+  commitBeforeMutationEffects,
+  commitLayoutEffects,
+  commitMutationEffects,
+} from "./react-fiber-commit-work";
 import { completeWork } from "./react-fiber-complete-work";
 import {
   finishQueueingConcurrentUpdates,
@@ -292,7 +296,16 @@ function commitRootImpl(root: FiberRoot) {
   const rootHasEffects = (finishedWork.flags & MutationMask) !== NoFlags;
 
   if (subtreeHasEffects || rootHasEffects) {
+    const shouldFireAfterActiveInstanceBlur = commitBeforeMutationEffects(
+      root,
+      finishedWork
+    );
+
     commitMutationEffects(root, finishedWork, lanes);
+
+    commitLayoutEffects(finishedWork, root, lanes);
+
+    root.current = finishedWork;
   } else {
     root.current = finishedWork;
   }
