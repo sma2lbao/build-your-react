@@ -297,11 +297,6 @@
       "reviewCategory": "production"
     },
     {
-      "packageName": "shared",
-      "projectFolder": "packages/shared",
-      "reviewCategory": "production"
-    },
-    {
       "packageName": "react-site",
       "projectFolder": "site",
       "reviewCategory": "production"

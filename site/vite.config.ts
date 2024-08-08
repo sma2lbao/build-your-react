@@ -5,7 +5,6 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-
   resolve: {
     alias: [
       {
@@ -14,6 +13,10 @@ export default defineConfig({
           __dirname,
           "../packages/react-dom-bindings/src/client/react-fiber-config-dom.ts"
         ),
+      },
+      {
+        find: "shared",
+        replacement: path.resolve(__dirname, "../packages/shared/src/"),
       },
     ],
   },

@@ -138,3 +138,10 @@ interface BaseFiberRootProperties {
 export interface FiberRoot extends BaseFiberRootProperties {
   [key: string]: any;
 }
+
+type BasicStateAction<S> = ((state: S) => S) | S;
+type Dispatch<A> = (action: A) => void;
+
+export type Dispatcher = {
+  useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
+};

@@ -9,9 +9,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build"
   },
   "devDependencies": {
     "typescript": "^5.2.2",

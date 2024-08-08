@@ -1,7 +1,7 @@
 lockfileVersion: '6.0'
 
 settings:
-  autoInstallPeers: false
+  autoInstallPeers: true
   excludeLinksFromLockfile: false
 
 importers:
@@ -13,9 +13,6 @@ importers:
       '@types/node':
         specifier: ~20.14.12
         version: 20.14.12
-      shared:
-        specifier: workspace:*
-        version: link:../shared
       typescript:
         specifier: ^5.2.2
         version: 5.5.4
@@ -27,19 +24,23 @@ importers:
         version: 4.0.0-beta.1(@types/node@20.14.12)(typescript@5.5.4)(vite@5.3.4)
 
   ../../packages/react-dom:
+    dependencies:
+      react:
+        specifier: workspace:*
+        version: link:../react
+      react-dom-bindings:
+        specifier: workspace:*
+        version: link:../react-dom-bindings
+      react-reconciler:
+        specifier: workspace:*
+        version: link:../react-reconciler
+      scheduler:
+        specifier: workspace:*
+        version: link:../scheduler
     devDependencies:
       '@types/node':
         specifier: ~20.14.12
         version: 20.14.12
-      react:
-        specifier: workspace:*
-        version: link:../react
-      react-reconciler:
-        specifier: workspace:*
-        version: link:../react-reconciler
-      shared:
-        specifier: workspace:*
-        version: link:../shared
       typescript:
         specifier: ^5.2.2
         version: 5.5.4
@@ -51,13 +52,17 @@ importers:
         version: 4.0.0-beta.1(@types/node@20.14.12)(typescript@5.5.4)(vite@5.3.4)
 
   ../../packages/react-dom-bindings:
+    dependencies:
+      react:
+        specifier: workspace:*
+        version: link:../react
+      react-reconciler:
+        specifier: workspace:*
+        version: link:../react-reconciler
     devDependencies:
       '@types/node':
         specifier: ~20.14.12
         version: 20.14.12
-      react-reconciler:
-        specifier: workspace:*
-        version: link:../react-reconciler
       typescript:
         specifier: ^5.2.2
         version: 5.5.4
@@ -70,6 +75,9 @@ importers:
 
   ../../packages/react-reconciler:
     dependencies:
+      react:
+        specifier: workspace:*
+        version: link:../react
       scheduler:
         specifier: workspace:*
         version: link:../scheduler
@@ -77,9 +85,6 @@ importers:
       '@types/node':
         specifier: ~20.14.12
         version: 20.14.12
-      shared:
-        specifier: workspace:*
-        version: link:../shared
       typescript:
         specifier: ^5.2.2
         version: 5.5.4
@@ -91,21 +96,6 @@ importers:
         version: 4.0.0-beta.1(@types/node@20.14.12)(typescript@5.5.4)(vite@5.3.4)
 
   ../../packages/scheduler:
-    devDependencies:
-      '@types/node':
-        specifier: ~20.14.12
-        version: 20.14.12
-      typescript:
-        specifier: ^5.2.2
-        version: 5.5.4
-      vite:
-        specifier: ^5.3.4
-        version: 5.3.4(@types/node@20.14.12)
-      vite-plugin-dts:
-        specifier: ~4.0.0-beta.1
-        version: 4.0.0-beta.1(@types/node@20.14.12)(typescript@5.5.4)(vite@5.3.4)
-
-  ../../packages/shared:
     devDependencies:
       '@types/node':
         specifier: ~20.14.12
@@ -915,7 +905,7 @@ packages:
       '@types/node': 20.14.12
       ajv: 8.13.0
       ajv-draft-04: 1.0.0(ajv@8.13.0)
-      ajv-formats: 3.0.1
+      ajv-formats: 3.0.1(ajv@8.13.0)
       fs-extra: 7.0.1
       import-lazy: 4.0.0
       jju: 1.4.0
@@ -1262,8 +1252,13 @@ packages:
       ajv: 8.13.0
     dev: true
 
-  /ajv-formats@3.0.1:
+  /ajv-formats@3.0.1(ajv@8.13.0):
     resolution: {integrity: sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==}
+    peerDependencies:
+      ajv: ^8.0.0
+    peerDependenciesMeta:
+      ajv:
+        optional: true
     dependencies:
       ajv: 8.13.0
     dev: true

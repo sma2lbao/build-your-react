@@ -9,18 +9,18 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build"
   },
   "devDependencies": {
     "typescript": "^5.2.2",
     "vite": "^5.3.4",
     "@types/node": "~20.14.12",
-    "vite-plugin-dts": "~4.0.0-beta.1",
-    "shared": "workspace:*"
+    "vite-plugin-dts": "~4.0.0-beta.1"
   },
   "dependencies": {
     "scheduler": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "workspace:*"
   }
 }

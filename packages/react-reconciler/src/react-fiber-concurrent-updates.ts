@@ -4,6 +4,10 @@ import type {
   SharedQueue as ClassQueue,
   Update as ClassUpdate,
 } from "./react-fiber-class-update-queue";
+import type {
+  UpdateQueue as HookQueue,
+  Update as HookUpdate,
+} from "./react-fiber-hooks";
 import { HostRoot } from "./react-work-tags";
 
 export type ConcurrentUpdate = {
@@ -28,6 +32,20 @@ export function enqueueConcurrentClassUpdate<State>(
   const concurrentQueue = queue as ConcurrentQueue;
   const concurrentUpdate = update as ConcurrentUpdate;
   enqueueUpdate(fiber, concurrentQueue, concurrentUpdate, lane);
+  return getRootForUpdatedFiber(fiber);
+}
+
+export function enqueueConcurrentHookUpdate<S, A>(
+  fiber: Fiber,
+  queue: HookQueue<S, A>,
+  update: HookUpdate<S, A>,
+  lane: Lane
+): FiberRoot | null {
+  const concurrentQueue: ConcurrentQueue = queue;
+  const concurrentUpdate: ConcurrentUpdate = update;
+
+  enqueueUpdate(fiber, concurrentQueue, concurrentUpdate, lane);
+
   return getRootForUpdatedFiber(fiber);
 }
 

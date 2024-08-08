@@ -24,6 +24,9 @@
     "paths": {
       "react-fiber-config": [
         "../react-dom-bindings/src/client/react-fiber-config-dom.ts"
+      ],
+      "shared/*": [
+        "../shared/src/*"
       ]
     },
   },
