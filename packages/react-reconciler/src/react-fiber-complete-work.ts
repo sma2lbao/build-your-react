@@ -1,4 +1,6 @@
 import {
+  Type,
+  Props,
   Instance,
   appendInitialChild,
   createInstance,
@@ -50,6 +52,13 @@ export function completeWork(
       const type = workInProgress.type;
       if (current !== null && workInProgress.stateNode != null) {
         // 更新
+        updateHostComponent(
+          current,
+          workInProgress,
+          type,
+          newProps,
+          renderLanes
+        );
       } else {
         if (!newProps) {
           if (workInProgress.stateNode === null) {
@@ -110,6 +119,28 @@ export function completeWork(
 }
 
 function updateHostContainer(current: Fiber | null, workInProgress: Fiber) {}
+
+/**
+ * 更新阶段宿主组件触发
+ * @param current
+ * @param workInProgress
+ */
+function updateHostComponent(
+  current: Fiber,
+  workInProgress: Fiber,
+  type: Type,
+  newProps: Props,
+  renderLanes: Lanes
+) {
+  if (supportsMutation) {
+    const oldProps = current.memoizedProps;
+    if (oldProps === newProps) {
+      return;
+    }
+
+    markUpdate(workInProgress);
+  }
+}
 
 function bubbleProperties(completedWork: Fiber) {
   // const didBailout =

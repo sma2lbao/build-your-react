@@ -9,6 +9,7 @@ import type {
   Update as HookUpdate,
 } from "./react-fiber-hooks";
 import { HostRoot } from "./react-work-tags";
+import { getWorkInProgressRoot } from "./react-fiber-work-loop";
 
 export type ConcurrentUpdate = {
   next: ConcurrentUpdate;
@@ -112,6 +113,28 @@ export function finishQueueingConcurrentUpdates(): void {
     if (lane !== NoLane) {
       markUpdateLaneFromFiberToRoot(fiber, update, lane);
     }
+  }
+}
+
+/**
+ * 优化路径
+ * @param fiber
+ * @param queue
+ * @param update
+ */
+export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
+  fiber: Fiber,
+  queue: HookQueue<S, A>,
+  update: HookUpdate<S, A>
+): void {
+  const lane = NoLane;
+  const concurrentQueue: ConcurrentQueue = queue;
+  const concurrentUpdate: ConcurrentUpdate = update;
+  enqueueUpdate(fiber, concurrentQueue, concurrentUpdate, lane);
+
+  const isConcurrentlyRendering = getWorkInProgressRoot() !== null;
+  if (!isConcurrentlyRendering) {
+    finishQueueingConcurrentUpdates();
   }
 }
 

@@ -61,6 +61,9 @@ let workInProgressRootRenderLanes: Lanes = NoLanes;
 
 let workInProgressRootExitStatus: RootExitStatus = RootInProgress;
 
+// 渲染过程中被访问的Fiber剩余的更新工作。只包括未处理的更新，不包括保释的孩子。
+let workInProgressRootSkippedLanes: Lanes = NoLanes;
+
 // begin/complete 阶段处理的优先级.
 export let entangledRenderLanes: Lanes = NoLanes;
 
@@ -89,7 +92,6 @@ export function performConcurrentWorkOnRoot(
   root: FiberRoot,
   didTimeout: boolean
 ): RenderTaskFn | null {
-  debugger;
   const originalCallbackNode = root.callbackNode;
 
   let lanes = getNextLanes(
@@ -199,6 +201,9 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   const current = unitOfWork.alternate;
   const next = beginWork(current, unitOfWork, entangledRenderLanes);
 
+  // 经过beginWork，fiber已经更新完成。
+  unitOfWork.memoizedProps = unitOfWork.pendingProps;
+
   // 如果这没有产生新的任务。
   if (next === null) {
     completeUnitOfWork(unitOfWork);
@@ -304,7 +309,6 @@ function commitRootImpl(root: FiberRoot) {
     commitMutationEffects(root, finishedWork, lanes);
 
     commitLayoutEffects(finishedWork, root, lanes);
-
     root.current = finishedWork;
   } else {
     root.current = finishedWork;
@@ -322,6 +326,7 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes) {
   workInProgress = rootWorkInProgress;
   workInProgressRootRenderLanes = lanes;
   workInProgressRootExitStatus = RootInProgress;
+  workInProgressRootSkippedLanes = NoLanes;
 
   finishQueueingConcurrentUpdates();
 
@@ -338,4 +343,15 @@ export function getWorkInProgressRootRenderLanes(): Lanes {
 
 export function requestUpdateLane(): Lane {
   return eventPriorityToLane(resolveUpdatePriority());
+}
+
+/**
+ * 将合并为处理的更新优先级通道（lane）
+ * @param lane
+ */
+export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
+  workInProgressRootSkippedLanes = mergeLanes(
+    lane,
+    workInProgressRootSkippedLanes
+  );
 }

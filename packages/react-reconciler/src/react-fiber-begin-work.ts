@@ -48,7 +48,6 @@ export function beginWork(
     case HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
     case FunctionComponent: {
-      debugger;
       const Component = workInProgress.type;
       const unresolvedProps = workInProgress.pendingProps;
 
@@ -97,6 +96,10 @@ export function reconcileChildren(
   }
 }
 
+export function markWorkInProgressReceivedUpdate() {
+  didReceiveUpdate = true;
+}
+
 function updateHostRoot(
   current: null | Fiber,
   workInProgress: Fiber,
@@ -116,7 +119,7 @@ function updateHostRoot(
   processUpdateQueue(workInProgress, nextProps, null, renderLanes);
 
   const nextState: RootState = workInProgress.memoizedState;
-
+  const root: FiberRoot = workInProgress.stateNode;
   const nextChildren = nextState.element;
 
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);

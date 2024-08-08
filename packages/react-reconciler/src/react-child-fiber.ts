@@ -105,11 +105,20 @@ function createChildReconciler(
     // 判断 key 是否一致来判断是否可复用
     while (child !== null) {
       if (child.key === key) {
-        // TODO 更新
-        // const elementType = element.type;
+        const elementType = element.type;
+        if (child.elementType === elementType) {
+          // 单节点删除其他兄弟节点
+          deleteRemainingChildren(returnFiber, child.sibling);
+          const existing = useFiber(child, element.props);
+          existing.return = returnFiber;
+          return existing;
+        }
+
+        // 都没有匹配
+        deleteRemainingChildren(returnFiber, child);
+        break;
       } else {
-        // TODO
-        // deleteChild(returnFiber, child);
+        deleteChild(returnFiber, child);
       }
 
       child = child.sibling;
@@ -152,23 +161,28 @@ function createChildReconciler(
       deleteChild(returnFiber, childToDelete);
       childToDelete = childToDelete.sibling;
     }
+    return null;
+  }
 
-    function deleteChild(returnFiber: Fiber, childToDelete: Fiber): void {
-      if (!shouldTrackSideEffects) {
-        return;
-      }
-
-      const deletions = returnFiber.deletions;
-
-      if (deletions === null) {
-        returnFiber.deletions = [childToDelete];
-        returnFiber.flags |= ChildDeletion;
-      } else {
-        deletions.push(childToDelete);
-      }
+  /**
+   * 更新阶段，给父fiber打上 ChildDeletion 的标记
+   * @param returnFiber
+   * @param childToDelete
+   * @returns
+   */
+  function deleteChild(returnFiber: Fiber, childToDelete: Fiber): void {
+    if (!shouldTrackSideEffects) {
+      return;
     }
 
-    return null;
+    const deletions = returnFiber.deletions;
+
+    if (deletions === null) {
+      returnFiber.deletions = [childToDelete];
+      returnFiber.flags |= ChildDeletion;
+    } else {
+      deletions.push(childToDelete);
+    }
   }
 
   function useFiber(fiber: Fiber, pendingProps: any): Fiber {

@@ -128,8 +128,24 @@ export function includesBlockingLane(root: FiberRoot, lanes: Lanes): boolean {
   return (lanes & SyncDefaultLanes) !== NoLanes;
 }
 
+/**
+ * 合并优先级通道
+ * @param a
+ * @param b
+ * @returns
+ */
 export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
   return a | b;
+}
+
+/**
+ * 是否为子集
+ * @param set
+ * @param subset
+ * @returns
+ */
+export function isSubsetOfLanes(set: Lanes, subset: Lanes | Lane): boolean {
+  return (set & subset) === subset;
 }
 
 function pickArbitraryLaneIndex(lanes: Lanes) {

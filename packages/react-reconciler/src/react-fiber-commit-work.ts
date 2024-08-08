@@ -3,8 +3,10 @@ import {
   Instance,
   appendChild,
   appendChildToContainer,
+  commitUpdate,
   insertBefore,
   insertInContainerBefore,
+  supportsMutation,
 } from "react-fiber-config";
 import {
   BeforeMutationMask,
@@ -60,6 +62,28 @@ function commitMutationEffectsOnFiber(
     case HostComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
+      if (supportsMutation) {
+        if (flags & Update) {
+          const instance: Instance = finishedWork.stateNode;
+          if (instance != null) {
+            const newProps = finishedWork.memoizedProps;
+
+            const oldProps =
+              current !== null ? current.memoizedProps : newProps;
+            const type = finishedWork.type;
+            try {
+              commitUpdate(instance, type, oldProps, newProps, finishedWork);
+            } catch (error) {
+              console.error(
+                new Error(`
+              HostComponent commitUpdate error
+              `)
+              );
+            }
+          }
+        }
+      }
+
       return;
     }
 

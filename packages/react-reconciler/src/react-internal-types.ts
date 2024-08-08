@@ -59,6 +59,9 @@ export interface Fiber {
    */
   updateQueue: any;
 
+  /**
+   * FunctionComponent 组件指向 第一个 HOOK
+   */
   memoizedState: any;
 
   mode: TypeOfMode;

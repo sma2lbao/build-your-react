@@ -1,6 +1,6 @@
 import { FiberRoot } from "react-reconciler/react-internal-types";
 import { COMMENT_NODE } from "./html-node-type";
-import { setInitialProperties } from "./react-dom-component";
+import { setInitialProperties, updateProperties } from "./react-dom-component";
 
 export { resolveUpdatePriority } from "./react-dom-update-priority";
 
@@ -10,7 +10,7 @@ export type Container = {
 
 export type Instance = Element;
 export type TextInstance = Text;
-
+export type Type = string;
 export type Props = {
   autoFocus?: boolean;
   children: any;
@@ -136,4 +136,14 @@ function getOwnerDocumentFromRootContainer(
       ? rootContainerElement
       : rootContainerElement.ownerDocument
   ) as Document;
+}
+
+export function commitUpdate(
+  domElement: Instance,
+  type: string,
+  oldProps: Props,
+  newProps: Props,
+  internalInstanceHandle: Object
+): void {
+  updateProperties(domElement, type, oldProps, newProps);
 }
