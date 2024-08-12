@@ -12,6 +12,12 @@ export function useState<S>(
   return dispatcher.useState(initialState);
 }
 
+export function useDeferredValue<T>(value: T, initialState?: T): T {
+  const dispatcher = resolveDispatcher();
+
+  return dispatcher.useDeferredValue(value, initialState);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

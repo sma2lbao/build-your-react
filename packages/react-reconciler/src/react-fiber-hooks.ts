@@ -8,11 +8,14 @@ import {
   Lanes,
   NoLane,
   NoLanes,
+  includesOnlyNonUrgentLanes,
   isSubsetOfLanes,
   mergeLanes,
 } from "./react-fiber-lane";
+import { ThenableState } from "./react-fiber-thenable";
 import {
   markSkippedUpdateLanes,
+  requestDeferredLane,
   requestUpdateLane,
   scheduleUpdateOnFiber,
 } from "./react-fiber-work-loop";
@@ -53,12 +56,34 @@ let currentlyRenderingFiber: Fiber | null = null;
 let currentHook: Hook | null = null;
 let workInProgressHook: Hook | null = null;
 
+// 在呈现阶段的任何时刻是否安排了更新。
+// 这不会被重置，如果我们做另一个渲染通道;只有当我们完全计算完这个分量的时候。
+// 这是一个优化，所以我们知道我们是否需要在抛出后清除渲染阶段更新。
+let didScheduleRenderPhaseUpdate: boolean = false;
+
+// 其中仅在当前渲染通道期间安排更新。每次尝试后都会重置。
+// 待办事项:也许有一些方法来巩固这个与' didscheduleendphaseupdate '。
+// 或者使用' numberOfReRenders '。
+let didScheduleRenderPhaseUpdateDuringThisPass: boolean = false;
+
+let thenableIndexCounter: number = 0;
+let thenableState: ThenableState | null = null;
+
+const RE_RENDER_LIMIT = 25;
+
 const HooksDispatcherOnMount: Dispatcher = {
   useState: mountState,
+  useDeferredValue: mountDeferredValue,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
   useState: updateState,
+  useDeferredValue: updateDeferredValue,
+};
+
+const HooksDispatcherOnRerender: Dispatcher = {
+  useState: rerenderState,
+  useDeferredValue: rerenderDeferredValue,
 };
 
 /**
@@ -251,6 +276,53 @@ function updateReducer<S, I, A>(
   return updateReducerImpl(hook, currentHook!, reducer);
 }
 
+function rerenderReducer<S, I, A>(
+  reducer: (state: S, action: A) => S,
+  initialArg: I,
+  init?: (initialState: I) => S
+): [S, Dispatch<A>] {
+  const hook = updateWorkInProgressHook();
+  const queue = hook.queue;
+
+  if (queue === null) {
+    throw new Error(
+      "Should have a queue. You are likely calling Hooks conditionally, " +
+        "which is not allowed. (https://react.dev/link/invalid-hook-call)"
+    );
+  }
+
+  queue.lastRenderedReducer = reducer;
+
+  const dispatch: Dispatch<A> = queue.dispatch;
+  const lastRenderPhaseUpdate = queue.pending;
+  let newState = hook.memoizedState;
+  if (lastRenderPhaseUpdate !== null) {
+    queue.pending = null;
+
+    const firstRenderPhaseUpdate = lastRenderPhaseUpdate.next;
+    let update = firstRenderPhaseUpdate;
+    do {
+      const action = update.action;
+      newState = reducer(newState, action);
+      update = update.next;
+    } while (update !== firstRenderPhaseUpdate);
+
+    if (!Object.is(newState, hook.memoizedState)) {
+      markWorkInProgressReceivedUpdate();
+    }
+
+    hook.memoizedState = newState;
+
+    if (hook.baseQueue === null) {
+      hook.baseState = newState;
+    }
+
+    queue.lastRenderedState = newState;
+  }
+
+  return [newState, dispatch];
+}
+
 function updateWorkInProgressHook(): Hook {
   let nextCurrentHook: Hook | null;
   if (currentHook === null) {
@@ -298,7 +370,7 @@ function updateWorkInProgressHook(): Hook {
     const newHook: Hook = {
       memoizedState: currentHook.memoizedState,
 
-      baseState: currentHook.baseQueue,
+      baseState: currentHook.baseState,
       baseQueue: currentHook.baseQueue,
       queue: currentHook.queue,
 
@@ -403,6 +475,71 @@ function updateReducerImpl<S, A>(
   return [hook.memoizedState, dispatch];
 }
 
+function rerenderState<S>(
+  initialState: (() => S) | S
+): [S, Dispatch<BasicStateAction<S>>] {
+  return rerenderReducer(basicStateReducer, initialState);
+}
+
+function mountDeferredValue<T>(value: T, initialValue?: T): T {
+  const hook = mountWorkInProgressHook();
+  return mountDeferredValueImpl(hook, value, initialValue);
+}
+
+function mountDeferredValueImpl<T>(hook: Hook, value: T, initialValue?: T): T {
+  hook.memoizedState = value;
+  return value;
+}
+
+function updateDeferredValue<T>(value: T, initialValue?: T): T {
+  const hook = updateWorkInProgressHook();
+  const resolvedCurrentHook = currentHook as Hook;
+  const prevValue: T = resolvedCurrentHook.memoizedState;
+  return updateDeferredValueImpl(hook, prevValue, value, initialValue);
+}
+
+function updateDeferredValueImpl<T>(
+  hook: Hook,
+  prevValue: T,
+  value: T,
+  initialValue?: T
+): T {
+  if (Object.is(value, prevValue)) {
+    return value;
+  } else {
+    // 收到新的状态值
+    // 有紧急的任务 - 推迟
+    const shouldDeferValue = !includesOnlyNonUrgentLanes(renderLanes);
+    if (shouldDeferValue) {
+      const deferredLane = requestDeferredLane();
+      currentlyRenderingFiber!.lanes = mergeLanes(
+        currentlyRenderingFiber!.lanes,
+        deferredLane
+      );
+
+      markSkippedUpdateLanes(deferredLane);
+
+      return prevValue;
+    } else {
+      // 不推迟
+      markWorkInProgressReceivedUpdate();
+      hook.memoizedState = value;
+      return value;
+    }
+  }
+}
+
+function rerenderDeferredValue<T>(value: T, initialValue?: T): T {
+  const hook = updateWorkInProgressHook();
+  if (currentHook === null) {
+    return mountDeferredValueImpl(hook, value, initialValue);
+  } else {
+    const prevValue: T = currentHook.memoizedState;
+
+    return updateDeferredValueImpl(hook, prevValue, value, initialValue);
+  }
+}
+
 /**
  *
  * @param state
@@ -433,4 +570,66 @@ function isRenderPhaseUpdate(fiber: Fiber): boolean {
     fiber === currentlyRenderingFiber ||
     (alternate !== null && alternate === currentlyRenderingFiber)
   );
+}
+
+export function resetHooksOnUnwind(workInProgress: Fiber): void {
+  if (didScheduleRenderPhaseUpdate) {
+    // TODO
+  }
+
+  renderLanes = NoLanes;
+  currentlyRenderingFiber = null;
+
+  currentHook = null;
+  workInProgressHook = null;
+}
+
+export function replaySuspendedComponentWithHooks<Props>(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: (p: Props) => any,
+  props: Props
+): any {
+  const children = renderWithHooksAgain(workInProgress, Component, props);
+
+  finishRenderingHooks(current, workInProgress, Component);
+  return children;
+}
+
+function renderWithHooksAgain<Props>(
+  workInProgress: Fiber,
+  Component: (p: Props) => any,
+  props: Props
+): any {
+  currentlyRenderingFiber = workInProgress;
+
+  let numberOfReRenders: number = 0;
+  let children;
+
+  do {
+    if (didScheduleRenderPhaseUpdateDuringThisPass) {
+      thenableState = null;
+    }
+    thenableIndexCounter = 0;
+    didScheduleRenderPhaseUpdateDuringThisPass = false;
+
+    if (numberOfReRenders >= RE_RENDER_LIMIT) {
+      throw new Error(
+        "Too many re-renders. React limits the number of renders to prevent " +
+          "an infinite loop."
+      );
+    }
+
+    numberOfReRenders += 1;
+
+    currentHook = null;
+    workInProgressHook = null;
+
+    workInProgress.updateQueue = null;
+
+    ReactSharedInternals.H = HooksDispatcherOnRerender;
+    children = Component(props);
+  } while (didScheduleRenderPhaseUpdateDuringThisPass);
+
+  return children;
 }

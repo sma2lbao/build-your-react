@@ -2,8 +2,8 @@ import * as React from "react";
 
 function App() {
   const [number, setNumber] = React.useState(1);
-
-  console.log("number: ", number);
+  const deferredValue = React.useDeferredValue(number);
+  console.log("number: ", number, deferredValue);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).updateNumber = setNumber;

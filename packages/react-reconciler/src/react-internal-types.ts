@@ -122,6 +122,8 @@ interface BaseFiberRootProperties {
    */
   finishedWork: Fiber | null;
 
+  cancelPendingCommit: null | (() => void);
+
   /**
    * 用于创建一个链表，该链表表示所有在其上安排了待处理任务的根。
    */
@@ -130,9 +132,19 @@ interface BaseFiberRootProperties {
   callbackNode: any;
   callbackPriority: Lane;
 
+  /**
+   * 待处理的任务通道
+   */
   pendingLanes: Lanes;
+  /**
+   * 暂停的任务通道
+   */
   suspendedLanes: Lanes;
+
   pingedLanes: Lanes;
+  /**
+   * 过期的任务通道
+   */
   expiredLanes: Lanes;
 
   finishedLanes: Lanes;
@@ -147,4 +159,5 @@ type Dispatch<A> = (action: A) => void;
 
 export type Dispatcher = {
   useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
+  useDeferredValue<T>(value: T, initialValue?: T): T;
 };

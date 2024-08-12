@@ -56,6 +56,8 @@ class FiberRootNode implements Omit<FiberRoot, "current"> {
 
   finishedWork = null;
 
+  cancelPendingCommit = null;
+
   next = null;
 
   callbackNode = null;

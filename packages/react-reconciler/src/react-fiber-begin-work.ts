@@ -1,6 +1,6 @@
 import { shouldSetTextContent } from "react-fiber-config";
 import { mountChildFibers, reconcileChildFibers } from "./react-child-fiber";
-import { Lanes } from "./react-fiber-lane";
+import { Lanes, NoLanes } from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
@@ -14,7 +14,10 @@ import {
   cloneUpdateQueue,
   processUpdateQueue,
 } from "./react-fiber-class-update-queue";
-import { renderWithHooks } from "./react-fiber-hooks";
+import {
+  renderWithHooks,
+  replaySuspendedComponentWithHooks,
+} from "./react-fiber-hooks";
 
 let didReceiveUpdate: boolean = false;
 
@@ -43,6 +46,8 @@ export function beginWork(
     // 首次渲染
     didReceiveUpdate = false;
   }
+
+  workInProgress.lanes = NoLanes;
 
   switch (workInProgress.tag) {
     case HostRoot:
@@ -182,4 +187,28 @@ function pushHostRootContext(workInProgress: Fiber) {
   const root = workInProgress.stateNode as FiberRoot;
 
   pushHostContainer(root.containerInfo);
+}
+
+export function replayFunctionComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  nextProps: any,
+  Component: any,
+  renderLanes: Lanes
+): Fiber | null {
+  const nextChildren = replaySuspendedComponentWithHooks(
+    current,
+    workInProgress,
+    Component,
+    nextProps
+  );
+
+  // TODO
+  // if (current !== null && !didReceiveUpdate) {
+  //   bailoutHooks(current, workInProgress, renderLanes);
+  //   return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+  // }
+
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
 }

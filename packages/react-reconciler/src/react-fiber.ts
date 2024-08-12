@@ -1,5 +1,5 @@
-import { NoFlags } from "./react-fiber-flags";
-import { Lanes, NoLanes } from "./react-fiber-lane";
+import { NoFlags, Placement } from "./react-fiber-flags";
+import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
 import { Fiber } from "./react-internal-types";
 import {
   ConcurrentMode,
@@ -121,6 +121,40 @@ export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
   workInProgress.sibling = current.sibling;
   workInProgress.index = current.index;
 
+  return workInProgress;
+}
+
+export function resetWorkInProgress(
+  workInProgress: Fiber,
+  renderLanes: Lanes
+): Fiber {
+  workInProgress.flags &= Placement;
+
+  const current = workInProgress.alternate;
+  if (current === null) {
+    workInProgress.childLanes = NoLanes;
+    workInProgress.lanes = renderLanes;
+
+    workInProgress.child = null;
+    workInProgress.subtreeFlags = NoFlags;
+    workInProgress.memoizedProps = null;
+    workInProgress.memoizedState = null;
+    workInProgress.updateQueue = null;
+
+    workInProgress.stateNode = null;
+  } else {
+    workInProgress.childLanes = current.childLanes;
+    workInProgress.lanes = current.lanes;
+
+    workInProgress.child = current.child;
+    workInProgress.subtreeFlags = NoFlags;
+    workInProgress.deletions = null;
+    workInProgress.memoizedProps = current.memoizedProps;
+    workInProgress.memoizedState = current.memoizedState;
+    workInProgress.updateQueue = current.updateQueue;
+
+    workInProgress.type = current.type;
+  }
   return workInProgress;
 }
 

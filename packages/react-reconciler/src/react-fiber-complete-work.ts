@@ -143,30 +143,27 @@ function updateHostComponent(
 }
 
 function bubbleProperties(completedWork: Fiber) {
-  // const didBailout =
-  //   completedWork.alternate !== null &&
-  //   completedWork.alternate.child === completedWork.child;
-  const didBailout = false;
+  const didBailout =
+    completedWork.alternate !== null &&
+    completedWork.alternate.child === completedWork.child;
 
   let newChildLanes: Lanes = NoLanes;
   let subtreeFlags = NoFlags;
 
-  if (!didBailout) {
-    let child = completedWork.child;
-    while (child !== null) {
-      newChildLanes = mergeLanes(
-        newChildLanes,
-        mergeLanes(child.lanes, child.childLanes)
-      );
+  let child = completedWork.child;
+  while (child !== null) {
+    newChildLanes = mergeLanes(
+      newChildLanes,
+      mergeLanes(child.lanes, child.childLanes)
+    );
 
-      subtreeFlags |= child.subtreeFlags;
-      subtreeFlags |= child.flags;
+    subtreeFlags |= child.subtreeFlags;
+    subtreeFlags |= child.flags;
 
-      child.return = completedWork;
-      child = child.sibling;
-    }
-    completedWork.subtreeFlags |= subtreeFlags;
+    child.return = completedWork;
+    child = child.sibling;
   }
+  completedWork.subtreeFlags |= subtreeFlags;
 
   completedWork.childLanes = newChildLanes;
   return didBailout;
