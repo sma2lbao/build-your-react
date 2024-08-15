@@ -340,7 +340,7 @@ function getHostSibling(fiber: Fiber): Instance | null {
 
     while (node.tag !== HostComponent && node.tag !== HostText) {
       if (node.flags & Placement) {
-        continue;
+        continue siblings;
       }
       if (node.child === null) {
         continue siblings;

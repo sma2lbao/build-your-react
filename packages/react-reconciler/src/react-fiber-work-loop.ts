@@ -328,8 +328,7 @@ function workLoopSync() {
 }
 
 function workLoopConcurrent() {
-  // && !shouldYield()
-  while (workInProgress !== null) {
+  while (workInProgress !== null && !shouldYield()) {
     performUnitOfWork(workInProgress);
   }
 }

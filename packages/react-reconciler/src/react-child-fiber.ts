@@ -67,6 +67,17 @@ function createChildReconciler(
           return firstChild;
         }
       }
+
+      if (Array.isArray(newChild)) {
+        const firstChild = reconcileChildrenArray(
+          returnFiber,
+          currentFirstChild,
+          newChild,
+          lanes
+        );
+
+        return firstChild;
+      }
     }
     if (
       typeof newChild === "number" ||
@@ -190,6 +201,338 @@ function createChildReconciler(
     clone.index = 0;
     clone.sibling = null;
     return clone;
+  }
+
+  /**
+   * 数组
+   * @param returnFiber wip
+   * @param currentFirstChild 第一个子Fiber；存在sibling 可以遍历其他Fiber
+   * @param newChildren ReactElement数组
+   * @param lanes
+   * @returns
+   */
+  function reconcileChildrenArray(
+    returnFiber: Fiber,
+    currentFirstChild: Fiber | null,
+    newChildren: Array<any>,
+    lanes: Lanes
+  ): Fiber | null {
+    debugger;
+    // 数组的一般分为 增、删；
+    // 备注：改为直接可复用。
+    // 增：可以在 首 、中 、尾 插入
+    // 删：可以在 首 、中 、尾 删除
+
+    // 最新的第一个子Fiber
+    let resultingFirstChild: Fiber | null = null;
+    let previousNewFiber: Fiber | null = null;
+
+    let oldFiber = currentFirstChild;
+    let lastPlacedIndex = 0;
+    let newIdx = 0;
+    let nextOldFiber = null;
+    // 取前段
+    // 当存在 旧 fiber时，遍历 reactElement 数组
+    for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
+      // 遇到旧fiber 位置在 reactElement 右边时（说明存在删除旧Fiber）停止遍历；
+      if (oldFiber.index > newIdx) {
+        nextOldFiber = oldFiber;
+        oldFiber = null;
+      } else {
+        nextOldFiber = oldFiber.sibling;
+      }
+      const newFiber = updateSlot(
+        returnFiber,
+        oldFiber,
+        newChildren[newIdx],
+        lanes
+      );
+
+      if (newFiber === null) {
+        if (oldFiber === null) {
+          oldFiber = nextOldFiber;
+        }
+        break;
+      }
+
+      lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+      if (previousNewFiber === null) {
+        resultingFirstChild = newFiber;
+      } else {
+        previousNewFiber.sibling = newFiber;
+      }
+      previousNewFiber = newFiber;
+      oldFiber = nextOldFiber;
+    }
+
+    // newChildren 长度比旧子fiber长度小或者相同且全都可以复用
+    if (newIdx === newChildren.length) {
+      // 标记其他旧fiber删除
+      deleteRemainingChildren(returnFiber, oldFiber);
+      return resultingFirstChild;
+    }
+
+    // 取中端
+    // 没有旧 fiber时（说明新的reactElement 比 旧fiber children 长）；创建新的Fiber
+    if (oldFiber === null) {
+      for (; newIdx < newChildren.length; newIdx++) {
+        const newFiber = createChild(returnFiber, newChildren[newIdx], lanes);
+        if (newFiber === null) {
+          continue;
+        }
+        lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+        if (previousNewFiber === null) {
+          resultingFirstChild = newFiber;
+        } else {
+          previousNewFiber.sibling = newFiber;
+        }
+        previousNewFiber = newFiber;
+      }
+
+      return resultingFirstChild;
+    }
+
+    // 还存在可以复用的旧fiber
+    const existingChildren = mapRemainingChildren(oldFiber);
+
+    // 取后端
+    for (; newIdx < newChildren.length; newIdx++) {
+      const newFiber = updateFromMap(
+        existingChildren,
+        returnFiber,
+        newIdx,
+        newChildren[newIdx],
+        lanes
+      );
+      if (newFiber !== null) {
+        lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+        if (previousNewFiber === null) {
+          resultingFirstChild = newFiber;
+        } else {
+          previousNewFiber.sibling = newFiber;
+        }
+
+        previousNewFiber = newFiber;
+      }
+    }
+
+    return resultingFirstChild;
+  }
+
+  function mapRemainingChildren(
+    currentFirstChild: Fiber
+  ): Map<string | number, Fiber> {
+    const existingChildren: Map<string | number, Fiber> = new Map();
+
+    let existingChild: null | Fiber = currentFirstChild;
+    while (existingChild !== null) {
+      if (existingChild.key !== null) {
+        existingChildren.set(existingChild.key, existingChild);
+      } else {
+        existingChildren.set(existingChild.index, existingChild);
+      }
+      existingChild = existingChild.sibling;
+    }
+    return existingChildren;
+  }
+
+  function updateSlot(
+    returnFiber: Fiber,
+    oldFiber: Fiber | null,
+    newChild: any,
+    lanes: Lanes
+  ): Fiber | null {
+    const key = oldFiber !== null ? oldFiber.key : null;
+
+    if (
+      (typeof newChild === "string" && newChild !== "") ||
+      typeof newChild === "number" ||
+      typeof newChild === "bigint"
+    ) {
+      if (key !== null) {
+        return null;
+      }
+      return updateTextNode(returnFiber, oldFiber, "" + newChild, lanes);
+    }
+
+    if (typeof newChild === "object" && newChild !== null) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE: {
+          if (newChild.key === key) {
+            const updated = updateElement(
+              returnFiber,
+              oldFiber,
+              newChild,
+              lanes
+            );
+            return updated;
+          } else {
+            return null;
+          }
+        }
+      }
+
+      if (Array.isArray(newChild)) {
+        if (key !== null) {
+          return null;
+        }
+
+        // TODO updateFragment
+        throw new Error("TODO updateFragment");
+      }
+    }
+
+    return null;
+  }
+
+  function updateFromMap(
+    existingChildren: Map<string | number, Fiber>,
+    returnFiber: Fiber,
+    newIdx: number,
+    newChild: any,
+    lanes: Lanes
+  ): Fiber | null {
+    if (
+      (typeof newChild === "string" && newChild !== "") ||
+      typeof newChild === "number" ||
+      typeof newChild === "bigint"
+    ) {
+      const matchedFiber = existingChildren.get(newIdx) || null;
+      return updateTextNode(returnFiber, matchedFiber, "" + newChild, lanes);
+    }
+
+    if (typeof newChild === "object" && newChild !== null) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE: {
+          const matchedFiber =
+            existingChildren.get(
+              newChild.key === null ? newIdx : newChild.key
+            ) || null;
+
+          const updated = updateElement(
+            returnFiber,
+            matchedFiber,
+            newChild,
+            lanes
+          );
+
+          return updated;
+        }
+      }
+
+      if (Array.isArray(newChild)) {
+        // TODO 支持 Fragment
+        throw new Error(`TODO 支持 Fragment`);
+      }
+    }
+
+    return null;
+  }
+
+  function createChild(
+    returnFiber: Fiber,
+    newChild: any,
+    lanes: Lanes
+  ): Fiber | null {
+    // 字符串和数字类型
+    if (
+      (typeof newChild === "string" && newChild !== "") ||
+      typeof newChild === "number" ||
+      typeof newChild === "bigint"
+    ) {
+      const created = createFiberFromText(
+        "" + newChild,
+        returnFiber.mode,
+        lanes
+      );
+      created.return = returnFiber;
+      return created;
+    }
+
+    if (typeof newChild === "object" && newChild !== null) {
+      switch (newChild.$$typeof) {
+        case REACT_ELEMENT_TYPE: {
+          const created = createFiberFromElement(
+            newChild,
+            returnFiber.mode,
+            lanes
+          );
+          created.return = returnFiber;
+          return created;
+        }
+      }
+
+      if (Array.isArray(newChild)) {
+        // TODO Fragment
+      }
+    }
+
+    return null;
+  }
+
+  function placeChild(
+    newFiber: Fiber,
+    lastPlacedIndex: number,
+    newIndex: number
+  ): number {
+    newFiber.index = newIndex;
+
+    const current = newFiber.alternate;
+    if (current !== null) {
+      const oldIndex = current.index;
+      if (oldIndex < lastPlacedIndex) {
+        newFiber.flags |= Placement;
+        return lastPlacedIndex;
+      } else {
+        return oldIndex;
+      }
+    } else {
+      newFiber.flags |= Placement;
+      return lastPlacedIndex;
+    }
+  }
+
+  function updateTextNode(
+    returnFiber: Fiber,
+    current: Fiber | null,
+    textContent: string,
+    lanes: Lanes
+  ) {
+    if (current === null || current.tag !== HostText) {
+      const created = createFiberFromText(textContent, returnFiber.mode, lanes);
+      created.return = returnFiber;
+
+      return created;
+    } else {
+      const existing = useFiber(current, textContent);
+      existing.return = returnFiber;
+
+      return existing;
+    }
+  }
+
+  function updateElement(
+    returnFiber: Fiber,
+    current: Fiber | null,
+    element: ReactElement,
+    lanes: Lanes
+  ): Fiber {
+    const elementType = element.type;
+    // TODO updateFragment
+
+    // 更新
+    if (current !== null) {
+      if (current.elementType === elementType) {
+        const existing = useFiber(current, element.props);
+        existing.return = returnFiber;
+
+        return existing;
+      }
+    }
+
+    const created = createFiberFromElement(element, returnFiber.mode, lanes);
+    created.return = returnFiber;
+    return created;
   }
 
   return reconcileChildFibers;
