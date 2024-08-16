@@ -2,7 +2,11 @@ import { FiberRoot } from "react-reconciler/react-internal-types";
 import { COMMENT_NODE } from "./html-node-type";
 import { setInitialProperties, updateProperties } from "./react-dom-component";
 
-export { resolveUpdatePriority } from "./react-dom-update-priority";
+export {
+  resolveUpdatePriority,
+  setCurrentUpdatePriority,
+  getCurrentUpdatePriority,
+} from "./react-dom-update-priority";
 
 export type Container = {
   _reactRootContainer?: FiberRoot;

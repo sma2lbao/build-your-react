@@ -10,9 +10,12 @@ import {
 } from "react-fiber-config";
 import {
   BeforeMutationMask,
+  ChildDeletion,
   LayoutMask,
   MutationMask,
   NoFlags,
+  Passive,
+  PassiveMask,
   Placement,
   Update,
 } from "./react-fiber-flags";
@@ -28,7 +31,10 @@ import {
   HookFlags,
   Layout as HookLayout,
   HasEffect as HookHasEffect,
+  Passive as HookPassive,
+  Insertion as HookInsertion,
 } from "./react-hook-effect-tags";
+import { FunctionComponentUpdateQueue } from "./react-fiber-hooks";
 
 let nextEffect: Fiber | null = null;
 
@@ -57,6 +63,39 @@ function commitMutationEffectsOnFiber(
     case FunctionComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
+
+      if (flags & Update) {
+        // 当前 fiber（函数组件）有更新标记
+        try {
+          commitHookEffectListUnmount(
+            HookInsertion | HookHasEffect,
+            finishedWork,
+            finishedWork.return
+          );
+          commitHookEffectListMount(
+            HookInsertion | HookHasEffect,
+            finishedWork
+          );
+        } catch (error) {
+          throw new Error(`captureCommitPhaseError`);
+        }
+
+        try {
+          // 在 React 的更新阶段中，布局效果的销毁发生在突变阶段（mutation phase）。
+          // 这样做的目的是确保所有组件的销毁函数都在创建函数之前被调用，以避免相互干扰。
+          // 具体来说，一个组件的销毁函数不会覆盖另一个组件创建函数所设置的引用，
+          // 从而保持组件的行为一致性。这样可以保证在同一提交过程中，不同组件之间的效果不会相互干扰。
+
+          commitHookEffectListUnmount(
+            HookLayout | HookHasEffect,
+            finishedWork,
+            finishedWork.return
+          );
+        } catch (error) {
+          throw new Error(`captureCommitPhaseError`);
+        }
+      }
+
       return;
     }
     case HostComponent: {
@@ -289,6 +328,33 @@ function commitPlacement(finishedWork: Fiber): void {
   }
 }
 
+function commitHookEffectListUnmount(
+  flags: HookFlags,
+  finishedWork: Fiber,
+  nearestMountedAncestor: Fiber | null
+) {
+  const updateQueue: FunctionComponentUpdateQueue | null =
+    finishedWork.updateQueue;
+  const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
+  if (lastEffect !== null) {
+    const firstEffect = lastEffect.next;
+    let effect = firstEffect;
+    do {
+      if ((effect.tag & flags) === flags) {
+        // 卸载阶段
+        const inst = effect.inst;
+        const destory = inst.destory;
+        if (destory !== undefined) {
+          inst.destory = undefined;
+          // 调用 副作用钩子函数 的 返回函数
+          safelyCallDestory(finishedWork, nearestMountedAncestor, destory);
+        }
+      }
+      effect = effect.next;
+    } while (effect !== firstEffect);
+  }
+}
+
 function commitHookLayoutEffects(finishedWork: Fiber, hookFlags: HookFlags) {
   try {
     commitHookEffectListMount(hookFlags, finishedWork);
@@ -299,7 +365,154 @@ function commitHookLayoutEffects(finishedWork: Fiber, hookFlags: HookFlags) {
 
 function commitHostComponentMount(finishedWork: Fiber) {}
 
-function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {}
+function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
+  const updateQueue: FunctionComponentUpdateQueue | null =
+    finishedWork.updateQueue;
+  const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
+  if (lastEffect !== null) {
+    const firstEffect = lastEffect.next;
+    let effect = firstEffect;
+    do {
+      if ((effect.tag & flags) === flags) {
+        // 渲染阶段
+        const create = effect.create;
+        const inst = effect.inst;
+        // 执行 useEffect 传入函数
+        const destory = create();
+        inst.destory = destory;
+      }
+
+      effect = effect.next;
+    } while (effect !== firstEffect);
+  }
+}
+
+export function commitPassiveUnmountEffects(finishedWork: Fiber): void {
+  commitPassiveUnmountOnFiber(finishedWork);
+}
+
+function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
+  switch (finishedWork.tag) {
+    case FunctionComponent: {
+      recursivelyTraversePassiveUnmountEffects(finishedWork);
+      if (finishedWork.flags & Passive) {
+        commitHookPassiveUnmountEffects(
+          finishedWork,
+          finishedWork.return,
+          HookPassive | HookHasEffect
+        );
+      }
+      break;
+    }
+    default: {
+      recursivelyTraversePassiveUnmountEffects(finishedWork);
+      break;
+    }
+  }
+}
+
+function recursivelyTraversePassiveUnmountEffects(parentFiber: Fiber): void {
+  const deletions = parentFiber.deletions;
+
+  if ((parentFiber.flags & ChildDeletion) !== NoFlags) {
+    // TODO 删除
+    // if (deletions !== null) {
+    //   for (let i = 0; i < deletions.length; i++) {
+    //     const childToDelete = deletions[i];
+    //     nextEffect = childToDelete;
+    //     commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
+    //       childToDelete,
+    //       parentFiber
+    //     );
+    //   }
+    // }
+    // detachAlternateSiblings(parentFiber);
+  }
+
+  if (parentFiber.subtreeFlags & PassiveMask) {
+    let child = parentFiber.child;
+    while (child !== null) {
+      commitPassiveUnmountOnFiber(child);
+
+      child = child.sibling;
+    }
+  }
+}
+
+function commitHookPassiveUnmountEffects(
+  finishedWork: Fiber,
+  nearestMountedAncestor: Fiber | null,
+  hookFlags: HookFlags
+) {
+  commitHookEffectListUnmount(hookFlags, finishedWork, nearestMountedAncestor);
+}
+
+export function commitPassiveMountEffects(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  committedLanes: Lanes
+): void {
+  commitPassiveMountOnFiber(root, finishedWork, committedLanes);
+}
+
+function commitPassiveMountOnFiber(
+  finishedRoot: FiberRoot,
+  finishedWork: Fiber,
+  committedLanes: Lanes
+): void {
+  const flags = finishedWork.flags;
+  switch (finishedWork.tag) {
+    case FunctionComponent: {
+      recursivelyTraversePassiveMountEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+
+      if (flags & Passive) {
+        commitHookPassiveMountEffects(
+          finishedWork,
+          HookPassive | HookHasEffect
+        );
+      }
+      break;
+    }
+    default: {
+      recursivelyTraversePassiveMountEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes
+      );
+    }
+  }
+}
+
+function recursivelyTraversePassiveMountEffects(
+  root: FiberRoot,
+  parentFiber: Fiber,
+  committedLanes: Lanes
+) {
+  if (parentFiber.subtreeFlags & PassiveMask) {
+    let child = parentFiber.child;
+
+    while (child !== null) {
+      commitPassiveMountOnFiber(root, child, committedLanes);
+
+      child = child.sibling;
+    }
+  }
+}
+
+function commitHookPassiveMountEffects(
+  finishedWork: Fiber,
+  hookFlags: HookFlags
+) {
+  try {
+    commitHookEffectListMount(hookFlags, finishedWork);
+  } catch (error) {
+    throw new Error("captureCommitPhaseError");
+  }
+}
 
 /**
  * 获取上级最近的原生fiber组件。用来插入真实dom
@@ -406,5 +619,17 @@ function insertOrAppendPlacementNodeIntoContainer(
         sibling = sibling.sibling;
       }
     }
+  }
+}
+
+function safelyCallDestory(
+  current: Fiber,
+  nearestMountedAncestor: Fiber | null,
+  destory: () => void
+) {
+  try {
+    destory();
+  } catch (error) {
+    throw new Error(`captureCommitPhaseError`);
   }
 }

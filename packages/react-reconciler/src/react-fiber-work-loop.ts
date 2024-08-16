@@ -1,10 +1,18 @@
-import { eventPriorityToLane } from "./react-event-priorities";
+import {
+  DefaultEventPriority,
+  DiscreteEventPriority,
+  eventPriorityToLane,
+  lanesToEventPriority,
+  lowerEventPriority,
+} from "./react-event-priorities";
 import { createWorkInProgress, resetWorkInProgress } from "./react-fiber";
 import { beginWork, replayFunctionComponent } from "./react-fiber-begin-work";
 import {
   commitBeforeMutationEffects,
   commitLayoutEffects,
   commitMutationEffects,
+  commitPassiveMountEffects,
+  commitPassiveUnmountEffects,
 } from "./react-fiber-commit-work";
 import { completeWork } from "./react-fiber-complete-work";
 import {
@@ -12,10 +20,13 @@ import {
   getConcurrentlyUpdatedLanes,
 } from "./react-fiber-concurrent-updates";
 import {
+  BeforeMutationMask,
   HostEffectMask,
   Incomplete,
+  LayoutMask,
   MutationMask,
   NoFlags,
+  PassiveMask,
 } from "./react-fiber-flags";
 import { resetHooksOnUnwind } from "./react-fiber-hooks";
 import {
@@ -42,8 +53,16 @@ import { isThenableResolved } from "./react-fiber-thenable";
 import { unwindInterruptedWork, unwindWork } from "./react-fiber-unwind-work";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import { FunctionComponent, HostComponent } from "./react-work-tags";
-import { shouldYield } from "./scheduler";
-import { resolveUpdatePriority } from "react-fiber-config";
+import {
+  scheduleCallback,
+  shouldYield,
+  NormalPriority as NormalSchedulerPriority,
+} from "./scheduler";
+import {
+  resolveUpdatePriority,
+  setCurrentUpdatePriority,
+  getCurrentUpdatePriority,
+} from "react-fiber-config";
 
 type RootExitStatus =
   | typeof RootInProgress
@@ -106,6 +125,12 @@ let workInProgress: Fiber | null = null;
 
 // 正在执行的lanes
 let workInProgressRootRenderLanes: Lanes = NoLanes;
+
+// 是否有 副作用
+let rootDoesHavePassiveEffects: boolean = false;
+let rootWithPendingPassiveEffects: FiberRoot | null = null;
+let pendingPassiveEffectsLanes: Lanes = NoLanes;
+let pendingPassiveEffectsRemainingLanes: Lanes = NoLanes;
 
 // 如果此通道调度延迟工作，则此通道为延迟任务的通道。
 let workInProgressDeferredLane: Lane = NoLane;
@@ -380,6 +405,44 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
   }
 }
 
+export function flushPassiveEffects(): boolean {
+  if (rootWithPendingPassiveEffects !== null) {
+    const root = rootWithPendingPassiveEffects;
+
+    const remainingLanes = pendingPassiveEffectsRemainingLanes;
+    pendingPassiveEffectsRemainingLanes = NoLanes;
+
+    const renderPriority = lanesToEventPriority(pendingPassiveEffectsLanes);
+    const priority = lowerEventPriority(DefaultEventPriority, renderPriority);
+    const previousPriority = getCurrentUpdatePriority();
+
+    try {
+      setCurrentUpdatePriority(priority);
+      return flushPassiveEffectsImpl();
+    } finally {
+      setCurrentUpdatePriority(previousPriority);
+    }
+  }
+
+  return false;
+}
+
+function flushPassiveEffectsImpl() {
+  if (rootWithPendingPassiveEffects === null) {
+    return false;
+  }
+
+  const root = rootWithPendingPassiveEffects;
+  const lanes = pendingPassiveEffectsLanes;
+  rootWithPendingPassiveEffects = null;
+  pendingPassiveEffectsLanes = NoLanes;
+
+  commitPassiveUnmountEffects(root.current);
+  commitPassiveMountEffects(root, root.current, lanes);
+
+  return true;
+}
+
 function replaySuspendedUnitOfWork(unitOfWork: Fiber): void {
   let next = replayBeginWork(unitOfWork);
 
@@ -504,6 +567,10 @@ function commitRoot(root: FiberRoot, spawnedLane: Lane) {
 }
 
 function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
+  do {
+    flushPassiveEffects();
+  } while (rootWithPendingPassiveEffects !== null);
+
   const finishedWork = root.finishedWork!;
   const lanes = root.finishedLanes;
 
@@ -533,11 +600,35 @@ function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
     workInProgressRootRenderLanes = NoLanes;
   }
 
+  // 如果有待处理的被动效果（passive effects），需要尽早安排一个回调来处理它们，
+  // 以确保它们在提交阶段中其他可能的任务之前被处理。
+  if (
+    (finishedWork.subtreeFlags & PassiveMask) !== NoFlags ||
+    (finishedWork.flags & PassiveMask) !== NoFlags
+  ) {
+    if (!rootDoesHavePassiveEffects) {
+      rootDoesHavePassiveEffects = true;
+      pendingPassiveEffectsRemainingLanes = remainingLanes;
+      scheduleCallback(NormalSchedulerPriority, () => {
+        flushPassiveEffects();
+        return null;
+      });
+    }
+  }
+
   const subtreeHasEffects =
-    (finishedWork.subtreeFlags & MutationMask) !== NoFlags;
-  const rootHasEffects = (finishedWork.flags & MutationMask) !== NoFlags;
+    (finishedWork.subtreeFlags &
+      (BeforeMutationMask | MutationMask | LayoutMask | PassiveMask)) !==
+    NoFlags;
+  const rootHasEffects =
+    (finishedWork.flags &
+      (BeforeMutationMask | MutationMask | LayoutMask | PassiveMask)) !==
+    NoFlags;
 
   if (subtreeHasEffects || rootHasEffects) {
+    const previousPriority = getCurrentUpdatePriority();
+    setCurrentUpdatePriority(DiscreteEventPriority);
+
     const shouldFireAfterActiveInstanceBlur = commitBeforeMutationEffects(
       root,
       finishedWork
@@ -545,11 +636,22 @@ function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
 
     commitMutationEffects(root, finishedWork, lanes);
 
-    commitLayoutEffects(finishedWork, root, lanes);
     root.current = finishedWork;
+
+    commitLayoutEffects(finishedWork, root, lanes);
+
+    setCurrentUpdatePriority(previousPriority);
   } else {
     root.current = finishedWork;
   }
+
+  if (rootDoesHavePassiveEffects) {
+    rootDoesHavePassiveEffects = false;
+    rootWithPendingPassiveEffects = root;
+    pendingPassiveEffectsLanes = lanes;
+  }
+
+  remainingLanes = root.pendingLanes;
 
   return null;
 }

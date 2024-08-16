@@ -24,6 +24,9 @@
     "paths": {
       "react": [
         "../react/src/index.ts"
+      ],
+      "react-dom": [
+        "../react-dom/src/index.ts"
       ]
     },
   },

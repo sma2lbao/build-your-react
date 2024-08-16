@@ -24,10 +24,14 @@
     "paths": {
       "react-reconciler/*": [
         "../react-reconciler/src/*"
+      ],
+      "shared/*": [
+        "../shared/src/*"
       ]
     }
   },
   "include": [
-    "src"
+    "src",
+    "../react-dom/src/react-dom-shared-internals.ts"
   ]
 }

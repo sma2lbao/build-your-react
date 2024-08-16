@@ -18,6 +18,14 @@ export function useDeferredValue<T>(value: T, initialState?: T): T {
   return dispatcher.useDeferredValue(value, initialState);
 }
 
+export function useEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useEffect(create, deps);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

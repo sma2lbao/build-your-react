@@ -21,6 +21,12 @@ import {
 } from "./react-fiber-work-loop";
 import { Dispatcher, Fiber } from "./react-internal-types";
 import ReactSharedInternals from "shared/react-shared-internals";
+import { Flags, Passive as PassiveEffect } from "./react-fiber-flags";
+import {
+  HookFlags,
+  Passive as HookPassive,
+  HasEffect as HookHasEffect,
+} from "./react-hook-effect-tags";
 
 type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
@@ -50,6 +56,41 @@ export type Hook = {
   next: Hook | null;
 };
 
+type EffectInstance = {
+  destory: void | (() => void);
+};
+
+export type Effect = {
+  tag: HookFlags;
+  create: () => (() => void) | void;
+  inst: EffectInstance;
+  deps: Array<any> | null;
+  next: Effect;
+};
+
+export type FunctionComponentUpdateQueue = {
+  lastEffect: Effect | null;
+  events: Array<EventFunctionPayload<any, any, any>> | null;
+  stores: Array<StoreConsistencyCheck<any>> | null;
+};
+
+type EventFunctionPayload<
+  Args,
+  Return,
+  F extends (...args: Array<Args>) => Return
+> = {
+  ref: {
+    eventFn: F;
+    impl: F;
+  };
+  nextImpl: F;
+};
+
+type StoreConsistencyCheck<T> = {
+  value: T;
+  getSnapshot: () => T;
+};
+
 let renderLanes: Lanes = NoLanes;
 let currentlyRenderingFiber: Fiber | null = null;
 
@@ -66,6 +107,7 @@ let didScheduleRenderPhaseUpdate: boolean = false;
 // 或者使用' numberOfReRenders '。
 let didScheduleRenderPhaseUpdateDuringThisPass: boolean = false;
 
+// 针对异步获取组件的组件 如 React.lazy()
 let thenableIndexCounter: number = 0;
 let thenableState: ThenableState | null = null;
 
@@ -74,16 +116,19 @@ const RE_RENDER_LIMIT = 25;
 const HooksDispatcherOnMount: Dispatcher = {
   useState: mountState,
   useDeferredValue: mountDeferredValue,
+  useEffect: mountEffect,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
   useState: updateState,
   useDeferredValue: updateDeferredValue,
+  useEffect: updateEffect,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
   useState: rerenderState,
   useDeferredValue: rerenderDeferredValue,
+  useEffect: updateEffect,
 };
 
 /**
@@ -193,6 +238,11 @@ function enqueueRenderPhaseUpdate<S, A>(
   queue.pending = update;
 }
 
+/**
+ * 首次渲染 useState 的具体实现
+ * @param initialState
+ * @returns
+ */
 function mountState<S>(
   initialState: (() => S) | S
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -540,6 +590,118 @@ function rerenderDeferredValue<T>(value: T, initialValue?: T): T {
   }
 }
 
+function mountEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  mountEffectImpl(PassiveEffect, HookPassive, create, deps);
+}
+
+function mountEffectImpl(
+  fiberFlags: Flags,
+  hookFlags: HookFlags,
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  currentlyRenderingFiber!.flags |= fiberFlags;
+
+  hook.memoizedState = pushEffect(
+    HookHasEffect | hookFlags,
+    create,
+    createEffectInstance(),
+    nextDeps
+  );
+}
+
+function updateEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  updateEffectImpl(PassiveEffect, HookPassive, create, deps);
+}
+
+function updateEffectImpl(
+  fiberFlags: Flags,
+  hookFlags: HookFlags,
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const effect: Effect = hook.memoizedState;
+  const inst = effect.inst;
+
+  if (currentHook !== null) {
+    if (nextDeps !== null) {
+      const prevEffect: Effect = currentHook.memoizedState;
+      const prevDeps = prevEffect.deps;
+      if (areHookInputsEqual(nextDeps, prevDeps)) {
+        // deps与上个阶段相同，只更新状态，不打 HookHasEffect标记
+        hook.memoizedState = pushEffect(hookFlags, create, inst, nextDeps);
+        return;
+      }
+      // deps不相同路径
+    }
+  }
+  // deps不相同或为null 路径
+
+  currentlyRenderingFiber!.flags |= fiberFlags;
+
+  hook.memoizedState = pushEffect(
+    HookHasEffect | hookFlags,
+    create,
+    inst,
+    nextDeps
+  );
+}
+
+function pushEffect(
+  tag: HookFlags,
+  create: () => (() => void) | void,
+  inst: EffectInstance,
+  deps: Array<any> | null
+): Effect {
+  const effect: Effect = {
+    tag,
+    create,
+    inst,
+    deps,
+    next: null as any,
+  };
+
+  let componentUpdateQueue: FunctionComponentUpdateQueue | null =
+    currentlyRenderingFiber!.updateQueue;
+
+  // 组成环
+  if (componentUpdateQueue === null) {
+    componentUpdateQueue = createFunctionComponentUpdateQueue();
+    currentlyRenderingFiber!.updateQueue = componentUpdateQueue;
+    componentUpdateQueue!.lastEffect = effect.next = effect;
+  } else {
+    const lastEffect = componentUpdateQueue.lastEffect;
+    if (lastEffect === null) {
+      componentUpdateQueue.lastEffect = effect.next = effect;
+    } else {
+      const firstEffect = lastEffect.next;
+      lastEffect.next = effect;
+      effect.next = firstEffect;
+      componentUpdateQueue.lastEffect = effect;
+    }
+  }
+
+  return effect;
+}
+
+function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
+  return {
+    lastEffect: null,
+    events: null,
+    stores: null,
+  };
+}
+
 /**
  *
  * @param state
@@ -552,6 +714,12 @@ function basicStateReducer<S>(state: S, action: BasicStateAction<S>): S {
     : action;
 }
 
+/**
+ * 全局变量重置
+ * @param current
+ * @param workInProgress
+ * @param Component
+ */
 function finishRenderingHooks<Props, SecondArg>(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -632,4 +800,32 @@ function renderWithHooksAgain<Props>(
   } while (didScheduleRenderPhaseUpdateDuringThisPass);
 
   return children;
+}
+
+function createEffectInstance(): EffectInstance {
+  return {
+    destory: undefined,
+  };
+}
+
+/**
+ * 判断 useEffect 依赖更新前后的值是否相同
+ * @param nextDeps
+ * @param prevDeps
+ */
+function areHookInputsEqual(
+  nextDeps: Array<any>,
+  prevDeps: Array<any> | null
+): boolean {
+  if (prevDeps === null) {
+    return false;
+  }
+  for (let i = 0; i < prevDeps.length && i < nextDeps.length; i++) {
+    if (Object.is(nextDeps[i], prevDeps[i])) {
+      continue;
+    }
+    return false;
+  }
+
+  return true;
 }

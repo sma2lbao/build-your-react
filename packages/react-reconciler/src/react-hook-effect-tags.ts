@@ -1,3 +1,6 @@
+/**
+ * hook 标记
+ */
 export type HookFlags = number;
 
 export const NoFlags = 0b0000;

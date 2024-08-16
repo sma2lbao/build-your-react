@@ -160,4 +160,8 @@ type Dispatch<A> = (action: A) => void;
 export type Dispatcher = {
   useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
   useDeferredValue<T>(value: T, initialValue?: T): T;
+  useEffect(
+    create: () => (() => void) | void,
+    deps: Array<any> | void | null
+  ): void;
 };
