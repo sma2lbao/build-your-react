@@ -42,3 +42,7 @@ export type Thenable<T> =
   | PendingThenable<T>
   | FulfilledThenable<T>
   | RejectedThenable<T>;
+
+export type RefObject = {
+  current: any;
+};

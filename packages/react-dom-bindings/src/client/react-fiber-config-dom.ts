@@ -151,3 +151,7 @@ export function commitUpdate(
 ): void {
   updateProperties(domElement, type, oldProps, newProps);
 }
+
+export function getPublicInstance(instance: Instance) {
+  return instance;
+}

@@ -18,6 +18,11 @@ export function useDeferredValue<T>(value: T, initialState?: T): T {
   return dispatcher.useDeferredValue(value, initialState);
 }
 
+export function useRef<T>(initialValue: T): { current: T } {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useRef(initialValue);
+}
+
 export function useEffect(
   create: () => (() => void) | void,
   deps: Array<any> | void | null

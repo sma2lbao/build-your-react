@@ -21,6 +21,11 @@ export const ChildDeletion = 0b0000000000000000000000010000;
 export const Update = 0b0000000000000000000000000100;
 
 /**
+ * Fiber Ref标记
+ */
+export const Ref = 0b0000000000000000001000000000;
+
+/**
  * Fiber副作用标记
  */
 export const Passive = 0b0000000000000000100000000000;
@@ -31,8 +36,8 @@ export const Incomplete = 0b0000000000001000000000000000;
 
 export const BeforeMutationMask = Update;
 
-export const MutationMask = Placement | Update | ChildDeletion;
+export const MutationMask = Placement | Update | ChildDeletion | Ref;
 
-export const LayoutMask = Update;
+export const LayoutMask = Update | Ref;
 
 export const PassiveMask = Passive | ChildDeletion;

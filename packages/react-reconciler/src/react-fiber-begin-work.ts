@@ -18,6 +18,7 @@ import {
   renderWithHooks,
   replaySuspendedComponentWithHooks,
 } from "./react-fiber-hooks";
+import { Ref } from "./react-fiber-flags";
 
 let didReceiveUpdate: boolean = false;
 
@@ -171,6 +172,7 @@ function updateHostComponent(
     nextChildren = null;
   }
 
+  markRef(current, workInProgress);
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
 }
@@ -211,4 +213,23 @@ export function replayFunctionComponent(
 
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
+}
+
+function markRef(current: Fiber | null, workInProgress: Fiber) {
+  const ref = workInProgress.ref;
+  if (ref === null) {
+    if (current !== null && current.ref !== null) {
+      workInProgress.flags |= Ref;
+    }
+  } else {
+    if (typeof ref !== "object") {
+      throw new Error(
+        "Expected ref to be an object returned by React.createRef(), or undefined/null."
+      );
+    }
+
+    if (current === null || current.ref !== ref) {
+      workInProgress.flags |= Ref;
+    }
+  }
 }

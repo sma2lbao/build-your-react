@@ -5,15 +5,9 @@ export function createElement(
   config: Record<string, any>,
   ...children: any
 ) {
-  let key = null;
+  let key = config?.key !== undefined ? "" + config.key : null;
   let ref = null;
-  const { key: _key, ref: _ref, ...rest } = config || {};
-  if (_key) {
-    key = "" + _key;
-  }
-  if (_ref) {
-    ref = "" + _ref;
-  }
+  const { ...rest } = config || {};
 
   const props: Record<string, any> = { ...rest, children };
 
@@ -30,12 +24,12 @@ export function createElement(
   return ReactElement(type, key, ref, props);
 }
 
-function ReactElement(type: any, key: string | null, ref: any, props: any) {
+function ReactElement(type: any, key: string | null, _ref: any, props: any) {
   let element = {
     $$typeof: REACT_ELEMENT_TYPE,
     type,
     key,
-    ref,
+    ref: props?.ref ?? null,
     props,
   };
 
@@ -50,15 +44,11 @@ export function jsx(type: any, config: any, maybeKey: any) {
     key = "" + maybeKey;
   }
 
-  const { key: _key, ref: _ref, ...rest } = config || {};
-  if (_key) {
-    key = "" + _key;
-  }
-  if (_ref) {
-    ref = "" + _ref;
+  if (config?.key !== undefined) {
+    key = "" + config.key;
   }
 
-  const props: Record<string, any> = { ...rest };
+  const props: Record<string, any> = config || {};
 
   return ReactElement(type, key, ref, props);
 }

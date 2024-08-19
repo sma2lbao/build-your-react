@@ -120,6 +120,7 @@ export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
 
   workInProgress.sibling = current.sibling;
   workInProgress.index = current.index;
+  workInProgress.ref = current.ref;
 
   return workInProgress;
 }
@@ -185,6 +186,8 @@ class FiberNode implements Fiber {
   sibling = null;
 
   index = 0;
+
+  ref = null;
 
   pendingProps;
   memoizedProps = null;

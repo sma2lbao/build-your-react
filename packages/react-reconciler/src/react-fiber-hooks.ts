@@ -117,18 +117,21 @@ const HooksDispatcherOnMount: Dispatcher = {
   useState: mountState,
   useDeferredValue: mountDeferredValue,
   useEffect: mountEffect,
+  useRef: mountRef,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
   useState: updateState,
   useDeferredValue: updateDeferredValue,
   useEffect: updateEffect,
+  useRef: updateRef,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
   useState: rerenderState,
   useDeferredValue: rerenderDeferredValue,
   useEffect: updateEffect,
+  useRef: updateRef,
 };
 
 /**
@@ -700,6 +703,18 @@ function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
     events: null,
     stores: null,
   };
+}
+
+function mountRef<T>(initialValue: T): { current: T } {
+  const hook = mountWorkInProgressHook();
+  const ref = { current: initialValue };
+  hook.memoizedState = ref;
+  return ref;
+}
+
+function updateRef<T>(initialValue: T): { current: T } {
+  const hook = updateWorkInProgressHook();
+  return hook.memoizedState;
 }
 
 /**

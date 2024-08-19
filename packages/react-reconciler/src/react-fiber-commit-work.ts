@@ -4,6 +4,7 @@ import {
   appendChild,
   appendChildToContainer,
   commitUpdate,
+  getPublicInstance,
   insertBefore,
   insertInContainerBefore,
   supportsMutation,
@@ -17,6 +18,7 @@ import {
   Passive,
   PassiveMask,
   Placement,
+  Ref,
   Update,
 } from "./react-fiber-flags";
 import { Lanes } from "./react-fiber-lane";
@@ -101,6 +103,13 @@ function commitMutationEffectsOnFiber(
     case HostComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
+
+      if (flags & Ref) {
+        if (current !== null) {
+          safelyDetachRef(current);
+        }
+      }
+
       if (supportsMutation) {
         if (flags & Update) {
           const instance: Instance = finishedWork.stateNode;
@@ -245,6 +254,10 @@ function commitLayoutEffectOnFiber(
 
       if (current === null && flags & Update) {
         commitHostComponentMount(finishedWork);
+      }
+
+      if (flags & Ref) {
+        safelyAttachRef(finishedWork);
       }
 
       break;
@@ -622,6 +635,23 @@ function insertOrAppendPlacementNodeIntoContainer(
   }
 }
 
+function commitAttachRef(finishedWork: Fiber) {
+  const ref = finishedWork.ref;
+  if (ref !== null) {
+    const instance = finishedWork.stateNode;
+    let instanceToUse;
+    switch (finishedWork.tag) {
+      case HostComponent:
+        instanceToUse = getPublicInstance(instance);
+        break;
+      default:
+        instanceToUse = instance;
+    }
+
+    ref.current = instanceToUse;
+  }
+}
+
 function safelyCallDestory(
   current: Fiber,
   nearestMountedAncestor: Fiber | null,
@@ -631,5 +661,21 @@ function safelyCallDestory(
     destory();
   } catch (error) {
     throw new Error(`captureCommitPhaseError`);
+  }
+}
+
+function safelyAttachRef(current: Fiber) {
+  try {
+    commitAttachRef(current);
+  } catch (error) {
+    throw new Error(`captureCommitPhaseError`);
+  }
+}
+
+function safelyDetachRef(current: Fiber) {
+  const ref = current.ref;
+
+  if (ref !== null) {
+    ref.current = null;
   }
 }

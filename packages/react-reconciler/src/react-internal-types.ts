@@ -4,6 +4,7 @@ import { Lane, Lanes } from "./react-fiber-lane";
 import { RootTag } from "./react-root-tags";
 import { WorkTag } from "./react-work-tags";
 import { TypeOfMode } from "./react-type-of-mode";
+import { RefObject } from "shared/react-types";
 
 export interface Fiber {
   /**
@@ -50,6 +51,8 @@ export interface Fiber {
    * 同级节点位置
    */
   index: number;
+
+  ref: null | RefObject;
 
   pendingProps: any;
   memoizedProps: any;
@@ -160,6 +163,7 @@ type Dispatch<A> = (action: A) => void;
 export type Dispatcher = {
   useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
   useDeferredValue<T>(value: T, initialValue?: T): T;
+  useRef<T>(initialValue: T): { current: T };
   useEffect(
     create: () => (() => void) | void,
     deps: Array<any> | void | null

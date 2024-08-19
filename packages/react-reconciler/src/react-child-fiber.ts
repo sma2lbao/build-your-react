@@ -121,6 +121,7 @@ function createChildReconciler(
           // 单节点删除其他兄弟节点
           deleteRemainingChildren(returnFiber, child.sibling);
           const existing = useFiber(child, element.props);
+          coerceRef(returnFiber, child, existing, element);
           existing.return = returnFiber;
           return existing;
         }
@@ -136,6 +137,7 @@ function createChildReconciler(
     }
 
     const created = createFiberFromElement(element, returnFiber.mode, lanes);
+    coerceRef(returnFiber, currentFirstChild, created, element);
     created.return = returnFiber;
     return created;
   }
@@ -217,7 +219,6 @@ function createChildReconciler(
     newChildren: Array<any>,
     lanes: Lanes
   ): Fiber | null {
-    debugger;
     // 数组的一般分为 增、删；
     // 备注：改为直接可复用。
     // 增：可以在 首 、中 、尾 插入
@@ -457,6 +458,7 @@ function createChildReconciler(
             returnFiber.mode,
             lanes
           );
+          coerceRef(returnFiber, null, created, newChild);
           created.return = returnFiber;
           return created;
         }
@@ -524,6 +526,7 @@ function createChildReconciler(
     if (current !== null) {
       if (current.elementType === elementType) {
         const existing = useFiber(current, element.props);
+        coerceRef(returnFiber, current, existing, element);
         existing.return = returnFiber;
 
         return existing;
@@ -531,9 +534,23 @@ function createChildReconciler(
     }
 
     const created = createFiberFromElement(element, returnFiber.mode, lanes);
+    coerceRef(returnFiber, current, created, element);
     created.return = returnFiber;
     return created;
   }
 
   return reconcileChildFibers;
+}
+
+function coerceRef(
+  returnFier: Fiber,
+  current: Fiber | null,
+  workInProgress: Fiber,
+  element: ReactElement
+): void {
+  debugger;
+  const refProp = element.props.ref;
+  const ref = refProp !== undefined ? refProp : null;
+
+  workInProgress.ref = ref;
 }
