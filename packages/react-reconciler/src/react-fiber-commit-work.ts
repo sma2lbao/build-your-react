@@ -40,6 +40,12 @@ import { FunctionComponentUpdateQueue } from "./react-fiber-hooks";
 
 let nextEffect: Fiber | null = null;
 
+/**
+ * commit 阶段 mutation 阶段入口
+ * @param root
+ * @param finishedWork
+ * @param committedLanes
+ */
 export function commitMutationEffects(
   root: FiberRoot,
   finishedWork: Fiber,
@@ -48,6 +54,13 @@ export function commitMutationEffects(
   commitMutationEffectsOnFiber(finishedWork, root, committedLanes);
 }
 
+/**
+ * mutation阶段具体实现
+ * @param finishedWork
+ * @param root
+ * @param lanes
+ * @returns
+ */
 function commitMutationEffectsOnFiber(
   finishedWork: Fiber,
   root: FiberRoot,
@@ -65,7 +78,8 @@ function commitMutationEffectsOnFiber(
     case FunctionComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
-
+      // 到达这里说明真实dom已经挂载到父宿主节点上了，但不一定加入document上（父fiber也可能是Placement）
+      // 主要处理 effect 相关
       if (flags & Update) {
         // 当前 fiber（函数组件）有更新标记
         try {
@@ -288,6 +302,14 @@ function recursivelyTraverseLayoutEffects(
   }
 }
 
+/**
+ * mutation阶段的递归遍历
+ * 主要处理 deletions 及 MutationMask 的 fiber 节点
+ * 以及向child递归
+ * @param root
+ * @param parentFiber
+ * @param lanes
+ */
 function recursivelyTraverseMutationEffects(
   root: FiberRoot,
   parentFiber: Fiber,
@@ -309,6 +331,10 @@ function recursivelyTraverseMutationEffects(
   }
 }
 
+/**
+ * 处理 Placement fiber 标记。主要是真实dom的插入
+ * @param finishedWork
+ */
 function commitReconciliationEffects(finishedWork: Fiber) {
   const flags = finishedWork.flags;
   if (flags & Placement) {
@@ -317,7 +343,14 @@ function commitReconciliationEffects(finishedWork: Fiber) {
   }
 }
 
+/**
+ * 提交当前 fiber 的真实dom。即将dom加入到真实的文档中
+ * 叶子节点的fiber最先进入
+ * 当到达HostRoot fiber 说明所有的placement的fiber节点都加入文档中了
+ * @param finishedWork
+ */
 function commitPlacement(finishedWork: Fiber): void {
+  // 获取祖先宿主组件，比如div对应fiber
   const parentFiber = getHostParentFiber(finishedWork);
 
   switch (parentFiber.tag) {

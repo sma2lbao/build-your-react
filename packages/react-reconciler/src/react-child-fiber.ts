@@ -548,7 +548,6 @@ function coerceRef(
   workInProgress: Fiber,
   element: ReactElement
 ): void {
-  debugger;
   const refProp = element.props.ref;
   const ref = refProp !== undefined ? refProp : null;
 

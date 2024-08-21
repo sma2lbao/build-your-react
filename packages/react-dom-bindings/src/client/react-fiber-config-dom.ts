@@ -32,6 +32,12 @@ export const supportsMutation = true;
 
 export const scheduleMicrotask = queueMicrotask;
 
+/**
+ * 创建文本节点
+ * @param text
+ * @param rootContainerInstance
+ * @returns
+ */
 export function createTextInstance(
   text: string,
   rootContainerInstance: Container

@@ -31,6 +31,14 @@ export function useEffect(
   return dispatcher.useEffect(create, deps);
 }
 
+export function useLayoutEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useLayoutEffect(create, deps);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

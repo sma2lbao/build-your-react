@@ -21,10 +21,15 @@ import {
 } from "./react-fiber-work-loop";
 import { Dispatcher, Fiber } from "./react-internal-types";
 import ReactSharedInternals from "shared/react-shared-internals";
-import { Flags, Passive as PassiveEffect } from "./react-fiber-flags";
+import {
+  Flags,
+  Passive as PassiveEffect,
+  Update as UpdateEffect,
+} from "./react-fiber-flags";
 import {
   HookFlags,
   Passive as HookPassive,
+  Layout as HookLayout,
   HasEffect as HookHasEffect,
 } from "./react-hook-effect-tags";
 
@@ -117,6 +122,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useState: mountState,
   useDeferredValue: mountDeferredValue,
   useEffect: mountEffect,
+  useLayoutEffect: mountLayoutEffect,
   useRef: mountRef,
 };
 
@@ -124,6 +130,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useState: updateState,
   useDeferredValue: updateDeferredValue,
   useEffect: updateEffect,
+  useLayoutEffect: updateLayoutEffect,
   useRef: updateRef,
 };
 
@@ -131,6 +138,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useState: rerenderState,
   useDeferredValue: rerenderDeferredValue,
   useEffect: updateEffect,
+  useLayoutEffect: updateLayoutEffect,
   useRef: updateRef,
 };
 
@@ -641,7 +649,7 @@ function updateEffectImpl(
       const prevEffect: Effect = currentHook.memoizedState;
       const prevDeps = prevEffect.deps;
       if (areHookInputsEqual(nextDeps, prevDeps)) {
-        // deps与上个阶段相同，只更新状态，不打 HookHasEffect标记
+        // deps与上个阶段相同，只更新状态，不打 HookHasEffect(useEffect) 或 HookLayout（useLayoutEffect） 标记
         hook.memoizedState = pushEffect(hookFlags, create, inst, nextDeps);
         return;
       }
@@ -695,6 +703,22 @@ function pushEffect(
   }
 
   return effect;
+}
+
+function mountLayoutEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  let fiberFlags: Flags = UpdateEffect;
+
+  return mountEffectImpl(fiberFlags, HookLayout, create, deps);
+}
+
+function updateLayoutEffect(
+  create: () => (() => void) | void,
+  deps: Array<any> | void | null
+): void {
+  return updateEffectImpl(UpdateEffect, HookLayout, create, deps);
 }
 
 function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {

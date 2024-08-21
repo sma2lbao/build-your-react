@@ -147,7 +147,7 @@ let workInProgressRootSkippedLanes: Lanes = NoLanes;
 export let entangledRenderLanes: Lanes = NoLanes;
 
 /**
- * 调度更新
+ * 调度更新入口
  * @param root
  * @param fiber
  * @param lane

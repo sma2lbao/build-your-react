@@ -72,6 +72,7 @@ export function ensureRootIsScheduled(root: FiberRoot): void {
 
   if (!didScheduleMicrotask) {
     didScheduleMicrotask = true;
+    // 立即调度微任务
     scheduleImmediateTask(processRootScheduleInMicrotask);
   }
 }
