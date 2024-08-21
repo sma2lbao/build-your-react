@@ -86,11 +86,12 @@ export function completeWork(
       return null;
     }
     case HostText: {
+      debugger;
       const newText = newProps;
       if (current && workInProgress.stateNode !== null) {
         // 更新
         const oldText = current.memoizedProps;
-        // updateHostText(current, workInProgress, oldText, newText);
+        updateHostText(current, workInProgress, oldText, newText);
       } else {
         // 渲染（新建）
         if (typeof newText !== "string") {
@@ -139,6 +140,20 @@ function updateHostComponent(
     }
 
     markUpdate(workInProgress);
+  }
+}
+
+function updateHostText(
+  current: Fiber,
+  workInProgress: Fiber,
+  oldText: string,
+  newText: string
+) {
+  debugger;
+  if (supportsMutation) {
+    if (oldText !== newText) {
+      markUpdate(workInProgress);
+    }
   }
 }
 

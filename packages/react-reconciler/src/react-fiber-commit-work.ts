@@ -1,17 +1,21 @@
 import {
   Container,
   Instance,
+  TextInstance,
   appendChild,
   appendChildToContainer,
+  commitTextUpdate,
   commitUpdate,
   getPublicInstance,
   insertBefore,
   insertInContainerBefore,
+  resetTextContent,
   supportsMutation,
 } from "react-fiber-config";
 import {
   BeforeMutationMask,
   ChildDeletion,
+  ContentReset,
   LayoutMask,
   MutationMask,
   NoFlags,
@@ -125,6 +129,15 @@ function commitMutationEffectsOnFiber(
       }
 
       if (supportsMutation) {
+        if (finishedWork.flags & ContentReset) {
+          const instance: Instance = finishedWork.stateNode;
+          try {
+            resetTextContent(instance);
+          } catch (error) {
+            throw new Error(`captureCommitPhaseError`);
+          }
+        }
+
         if (flags & Update) {
           const instance: Instance = finishedWork.stateNode;
           if (instance != null) {
@@ -152,6 +165,29 @@ function commitMutationEffectsOnFiber(
     case HostText: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
+
+      if (flags & Update) {
+        if (supportsMutation) {
+          if (finishedWork.stateNode === null) {
+            throw new Error(
+              "This should have a text node initialized. This error is likely " +
+                "caused by a bug in React. Please file an issue."
+            );
+          }
+
+          const textInstance: TextInstance = finishedWork.stateNode;
+          const newText: string = finishedWork.memoizedProps;
+          const oldText: string =
+            current !== null ? current.memoizedProps : newText;
+
+          try {
+            commitTextUpdate(textInstance, oldText, newText);
+          } catch (error) {
+            throw new Error(`captureCommitPhaseError`);
+          }
+        }
+      }
+
       return;
     }
     default: {
@@ -356,6 +392,13 @@ function commitPlacement(finishedWork: Fiber): void {
   switch (parentFiber.tag) {
     case HostComponent: {
       const parent: Instance = parentFiber.stateNode;
+
+      // 处理文本修改
+      if (parentFiber.flags & ContentReset) {
+        resetTextContent(parent);
+        parentFiber.flags &= ~ContentReset;
+      }
+
       const before = getHostSibling(finishedWork);
       insertOrAppendPlacementNode(finishedWork, before, parent);
       break;

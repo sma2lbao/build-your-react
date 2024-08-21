@@ -10,12 +10,7 @@ function BoxComparison() {
     }
   }, []);
 
-  return (
-    <div>
-      <div ref={refLayoutEffect}>测试</div>
-      <div>{height}</div>
-    </div>
-  );
+  return <div ref={refLayoutEffect}>测试{height}</div>;
 }
 
 export default BoxComparison;

@@ -1,6 +1,7 @@
 import { FiberRoot } from "react-reconciler/react-internal-types";
 import { COMMENT_NODE } from "./html-node-type";
 import { setInitialProperties, updateProperties } from "./react-dom-component";
+import { setTextContent } from "./set-text-content";
 
 export {
   resolveUpdatePriority,
@@ -156,6 +157,18 @@ export function commitUpdate(
   internalInstanceHandle: Object
 ): void {
   updateProperties(domElement, type, oldProps, newProps);
+}
+
+export function resetTextContent(domElement: Instance): void {
+  setTextContent(domElement, "");
+}
+
+export function commitTextUpdate(
+  textInstance: TextInstance,
+  oldText: string,
+  newText: string
+): void {
+  textInstance.nodeValue = newText;
 }
 
 export function getPublicInstance(instance: Instance) {

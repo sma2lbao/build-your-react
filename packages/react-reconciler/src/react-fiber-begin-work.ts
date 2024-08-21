@@ -18,7 +18,7 @@ import {
   renderWithHooks,
   replaySuspendedComponentWithHooks,
 } from "./react-fiber-hooks";
-import { Ref } from "./react-fiber-flags";
+import { ContentReset, Ref } from "./react-fiber-flags";
 
 let didReceiveUpdate: boolean = false;
 
@@ -170,6 +170,8 @@ function updateHostComponent(
 
   if (isDirectTextChild) {
     nextChildren = null;
+  } else if (prevProps !== null && shouldSetTextContent(type, prevProps)) {
+    workInProgress.flags |= ContentReset;
   }
 
   markRef(current, workInProgress);

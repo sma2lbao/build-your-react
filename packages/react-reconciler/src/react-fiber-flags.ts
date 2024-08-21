@@ -16,6 +16,11 @@ export const Placement = 0b0000000000000000000000000010;
 export const ChildDeletion = 0b0000000000000000000000010000;
 
 /**
+ * Fiber 内容更新标记；一般用于宿主组件的文本更新
+ */
+export const ContentReset = 0b0000000000000000000000100000;
+
+/**
  * Fiber更新标记
  */
 export const Update = 0b0000000000000000000000000100;
@@ -36,7 +41,8 @@ export const Incomplete = 0b0000000000001000000000000000;
 
 export const BeforeMutationMask = Update;
 
-export const MutationMask = Placement | Update | ChildDeletion | Ref;
+export const MutationMask =
+  Placement | Update | ChildDeletion | Ref | ContentReset;
 
 export const LayoutMask = Update | Ref;
 
