@@ -39,7 +39,7 @@ export const HostEffectMask = 0b0000000000000111111111111111;
 
 export const Incomplete = 0b0000000000001000000000000000;
 
-export const BeforeMutationMask = Update;
+export const BeforeMutationMask = Update | ChildDeletion;
 
 export const MutationMask =
   Placement | Update | ChildDeletion | Ref | ContentReset;

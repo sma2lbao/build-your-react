@@ -1,16 +1,11 @@
-import { useLayoutEffect, useState, useRef } from "react";
+import { useState } from "react";
 
 function BoxComparison() {
-  const [height, setHeight] = useState(0);
-  const refLayoutEffect = useRef<HTMLDivElement | null>(null);
+  const [show, setShow] = useState(false);
 
-  useLayoutEffect(() => {
-    if (refLayoutEffect.current) {
-      setHeight(refLayoutEffect.current.offsetWidth);
-    }
-  }, []);
+  window.setShow = setShow;
 
-  return <div ref={refLayoutEffect}>测试{height}</div>;
+  return <div>{show ? <div>是</div> : <div>否</div>}</div>;
 }
 
 export default BoxComparison;

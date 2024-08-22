@@ -6,6 +6,7 @@ import {
   appendChildToContainer,
   commitTextUpdate,
   commitUpdate,
+  detachDeletedInstance,
   getPublicInstance,
   insertBefore,
   insertInContainerBefore,
@@ -42,6 +43,9 @@ import {
 } from "./react-hook-effect-tags";
 import { FunctionComponentUpdateQueue } from "./react-fiber-hooks";
 
+/**
+ * 下一个有副作用的Fiber
+ */
 let nextEffect: Fiber | null = null;
 
 /**
@@ -504,18 +508,17 @@ function recursivelyTraversePassiveUnmountEffects(parentFiber: Fiber): void {
   const deletions = parentFiber.deletions;
 
   if ((parentFiber.flags & ChildDeletion) !== NoFlags) {
-    // TODO 删除
-    // if (deletions !== null) {
-    //   for (let i = 0; i < deletions.length; i++) {
-    //     const childToDelete = deletions[i];
-    //     nextEffect = childToDelete;
-    //     commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
-    //       childToDelete,
-    //       parentFiber
-    //     );
-    //   }
-    // }
-    // detachAlternateSiblings(parentFiber);
+    if (deletions !== null) {
+      for (let i = 0; i < deletions.length; i++) {
+        const childToDelete = deletions[i];
+        nextEffect = childToDelete;
+        commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
+          childToDelete,
+          parentFiber
+        );
+      }
+    }
+    detachAlternateSiblings(parentFiber);
   }
 
   if (parentFiber.subtreeFlags & PassiveMask) {
@@ -600,6 +603,111 @@ function commitHookPassiveMountEffects(
     commitHookEffectListMount(hookFlags, finishedWork);
   } catch (error) {
     throw new Error("captureCommitPhaseError");
+  }
+}
+
+function commitPassiveUnmountInsideDeletedTreeOnFiber(
+  current: Fiber,
+  nearestMountedAncestor: Fiber | null
+): void {
+  switch (current.tag) {
+    case FunctionComponent: {
+      commitHookPassiveUnmountEffects(
+        current,
+        nearestMountedAncestor,
+        HookPassive
+      );
+      break;
+    }
+  }
+}
+
+function commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
+  deletedSubtreeRoot: Fiber,
+  nearestMountedAncestor: Fiber | null
+) {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+
+    commitPassiveUnmountInsideDeletedTreeOnFiber(fiber, nearestMountedAncestor);
+
+    const child = fiber.child;
+
+    if (child !== null) {
+      child.return = fiber;
+      nextEffect = child;
+    } else {
+      commitPassiveUnmountEffectsInsideOfDeletedTree_complete(
+        deletedSubtreeRoot
+      );
+    }
+  }
+}
+
+function commitPassiveUnmountEffectsInsideOfDeletedTree_complete(
+  deletedSubtreeRoot: Fiber
+) {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+    const sibling = fiber.sibling;
+    const returnFiber = fiber.return;
+
+    detachFiberAfterEffects(fiber);
+    if (fiber === deletedSubtreeRoot) {
+      nextEffect = null;
+      return;
+    }
+
+    if (sibling !== null) {
+      sibling.return = returnFiber;
+      nextEffect = sibling;
+      return;
+    }
+
+    nextEffect = returnFiber;
+  }
+}
+
+function detachFiberAfterEffects(fiber: Fiber) {
+  const alternate = fiber.alternate;
+  if (alternate !== null) {
+    fiber.alternate = null;
+    detachFiberAfterEffects(alternate);
+  }
+
+  fiber.child = null;
+  fiber.deletions = null;
+  fiber.sibling = null;
+
+  if (fiber.tag === HostComponent) {
+    const hostInstance: Instance = fiber.stateNode;
+    if (hostInstance !== null) {
+      detachDeletedInstance(hostInstance);
+    }
+  }
+
+  fiber.stateNode = null;
+
+  fiber.return = null;
+  fiber.memoizedProps = null;
+  fiber.memoizedState = null;
+  fiber.pendingProps = null;
+  fiber.stateNode = null;
+  fiber.updateQueue = null;
+}
+
+function detachAlternateSiblings(parentFiber: Fiber) {
+  const previousFiber = parentFiber.alternate;
+  if (previousFiber !== null) {
+    let detachedChild = previousFiber.child;
+    if (detachedChild !== null) {
+      previousFiber.child = null;
+      do {
+        const detachedSibling: Fiber | null = detachedChild.sibling;
+        detachedChild.sibling = null;
+        detachedChild = detachedSibling;
+      } while (detachedChild !== null);
+    }
   }
 }
 

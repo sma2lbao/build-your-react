@@ -407,6 +407,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 
 export function flushPassiveEffects(): boolean {
   if (rootWithPendingPassiveEffects !== null) {
+    // 执行flushPassiveEffects
     const root = rootWithPendingPassiveEffects;
 
     const remainingLanes = pendingPassiveEffectsRemainingLanes;
@@ -609,6 +610,7 @@ function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
     if (!rootDoesHavePassiveEffects) {
       rootDoesHavePassiveEffects = true;
       pendingPassiveEffectsRemainingLanes = remainingLanes;
+      // 使用 schedule 调度 effect 副作用， 即异步执行 useEffect
       scheduleCallback(NormalSchedulerPriority, () => {
         flushPassiveEffects();
         return null;
@@ -633,11 +635,12 @@ function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
       root,
       finishedWork
     );
-
+    // 在该函数中有 HookLayout 的判断，即同步执行 useLayoutEffect 的 destory 函数（有的话）
     commitMutationEffects(root, finishedWork, lanes);
 
     root.current = finishedWork;
 
+    // 在该函数中有 HookLayout 的判断，即同步执行 useLayoutEffect
     commitLayoutEffects(finishedWork, root, lanes);
 
     setCurrentUpdatePriority(previousPriority);

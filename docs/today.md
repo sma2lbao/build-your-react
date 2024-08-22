@@ -33,3 +33,7 @@
 2024/08/21
 
 - 增加 ContentReset Flag
+
+2024/08/22
+
+- 增加 ChildDeletion Flag

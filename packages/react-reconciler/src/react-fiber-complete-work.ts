@@ -86,7 +86,6 @@ export function completeWork(
       return null;
     }
     case HostText: {
-      debugger;
       const newText = newProps;
       if (current && workInProgress.stateNode !== null) {
         // 更新
@@ -149,7 +148,6 @@ function updateHostText(
   oldText: string,
   newText: string
 ) {
-  debugger;
   if (supportsMutation) {
     if (oldText !== newText) {
       markUpdate(workInProgress);

@@ -9,6 +9,8 @@ export {
   getCurrentUpdatePriority,
 } from "./react-dom-update-priority";
 
+export { detachDeletedInstance } from "./react-dom-component-tree";
+
 export type Container = {
   _reactRootContainer?: FiberRoot;
 } & (Element | Document | DocumentFragment);
