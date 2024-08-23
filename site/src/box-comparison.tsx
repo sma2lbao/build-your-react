@@ -3,9 +3,17 @@ import { useState } from "react";
 function BoxComparison() {
   const [show, setShow] = useState(false);
 
-  window.setShow = setShow;
+  const handleClick = () => {
+    console.log("join", show);
+    // bug: 事件触发的优先级有bug。暂时用 setTimeout 代替
+    setTimeout(() => {
+      setShow(!show);
+    });
+  };
 
-  return <div>{show ? <div>是</div> : <div>否</div>}</div>;
+  return (
+    <div onClick={handleClick}>{show ? <div>是</div> : <div>否</div>}</div>
+  );
 }
 
 export default BoxComparison;

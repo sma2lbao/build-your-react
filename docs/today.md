@@ -37,3 +37,5 @@
 2024/08/22
 
 - 增加 ChildDeletion Flag
+
+- 支持事件绑定

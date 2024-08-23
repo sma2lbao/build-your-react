@@ -8,7 +8,10 @@ import { createUpdate, enqueueUpdate } from "./react-fiber-class-update-queue";
 import {
   requestUpdateLane,
   scheduleUpdateOnFiber,
+  batchedUpdates,
 } from "./react-fiber-work-loop";
+
+export { batchedUpdates };
 
 type OpaqueRoot = FiberRoot;
 

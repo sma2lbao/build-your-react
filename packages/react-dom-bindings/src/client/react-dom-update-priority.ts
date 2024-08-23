@@ -2,8 +2,8 @@ import {
   DefaultEventPriority,
   EventPriority,
 } from "react-reconciler/react-event-priorities";
-import { getEventPriority } from "./react-dom-event-listener";
 import ReactDOMSharedInternals from "shared/react-dom-shared-internals";
+import { getEventPriority } from "../events/react-dom-event-listener";
 
 export function resolveUpdatePriority(): EventPriority {
   const currentEvent = window.event;
@@ -12,7 +12,7 @@ export function resolveUpdatePriority(): EventPriority {
     return DefaultEventPriority;
   }
 
-  return getEventPriority(currentEvent.type);
+  return getEventPriority(currentEvent.type as any);
 }
 
 export function setCurrentUpdatePriority(newPriority: EventPriority): void {

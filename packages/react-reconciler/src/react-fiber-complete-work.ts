@@ -72,7 +72,12 @@ export function completeWork(
         }
 
         const rootContainerInstance = getRootHostContainer();
-        const instance = createInstance(type, newProps, rootContainerInstance);
+        const instance = createInstance(
+          type,
+          newProps,
+          rootContainerInstance,
+          workInProgress
+        );
 
         appendAllChildren(instance, workInProgress);
         workInProgress.stateNode = instance;
@@ -103,7 +108,8 @@ export function completeWork(
         const rootContainerInstance = getRootHostContainer();
         workInProgress.stateNode = createTextInstance(
           newText,
-          rootContainerInstance
+          rootContainerInstance,
+          workInProgress
         );
       }
 

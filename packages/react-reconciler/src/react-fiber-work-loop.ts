@@ -716,3 +716,7 @@ export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
     workInProgressRootSkippedLanes
   );
 }
+
+export function batchedUpdates<A, R>(fn: (a: A) => R, a: A): R {
+  return fn(a);
+}

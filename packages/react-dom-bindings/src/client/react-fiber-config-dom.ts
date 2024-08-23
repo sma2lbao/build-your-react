@@ -2,6 +2,10 @@ import { FiberRoot } from "react-reconciler/react-internal-types";
 import { COMMENT_NODE } from "./html-node-type";
 import { setInitialProperties, updateProperties } from "./react-dom-component";
 import { setTextContent } from "./set-text-content";
+import {
+  precacheFiberNode,
+  updateFiberProps,
+} from "./react-dom-component-tree";
 
 export {
   resolveUpdatePriority,
@@ -43,18 +47,23 @@ export const scheduleMicrotask = queueMicrotask;
  */
 export function createTextInstance(
   text: string,
-  rootContainerInstance: Container
+  rootContainerInstance: Container,
+  internalInstanceHandle: Object
 ): TextInstance {
   const textNode: TextInstance = getOwnerDocumentFromRootContainer(
     rootContainerInstance
   ).createTextNode(text);
+
+  precacheFiberNode(internalInstanceHandle as any, textNode);
+
   return textNode;
 }
 
 export function createInstance(
   type: string,
   props: Props,
-  rootContainerInstance: Container
+  rootContainerInstance: Container,
+  internalInstanceHandle: Object
 ) {
   const ownerDocument = getOwnerDocumentFromRootContainer(
     rootContainerInstance
@@ -63,7 +72,8 @@ export function createInstance(
   let domElement: Instance;
 
   domElement = ownerDocument.createElement(type);
-
+  precacheFiberNode(internalInstanceHandle as any, domElement);
+  updateFiberProps(domElement, props);
   return domElement;
 }
 
@@ -159,6 +169,7 @@ export function commitUpdate(
   internalInstanceHandle: Object
 ): void {
   updateProperties(domElement, type, oldProps, newProps);
+  updateFiberProps(domElement, newProps);
 }
 
 export function resetTextContent(domElement: Instance): void {
