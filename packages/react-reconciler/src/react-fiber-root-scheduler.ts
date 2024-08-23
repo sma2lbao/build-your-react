@@ -22,6 +22,7 @@ import {
   getWorkInProgressRoot,
   getWorkInProgressRootRenderLanes,
   performConcurrentWorkOnRoot,
+  performSyncWorkOnRoot,
 } from "./react-fiber-work-loop";
 
 import {
@@ -51,6 +52,10 @@ let didScheduleMicrotask: boolean = false;
  * 用于在没有同步工作要做时快速退出flushSync
  */
 let mightHavePendingSyncWork: boolean = false;
+/**
+ * 执行同步中的标记
+ */
+let isFlushingWork: boolean = false;
 
 /**
  * 调度FiberRoot。可能存在微任务
@@ -125,6 +130,10 @@ function processRootScheduleInMicrotask() {
     }
     root = next;
   }
+
+  // 在微任务结束时，清除所有挂起的同步工作。这必须在最后，因为它做实际的渲染工作，可能会抛出。
+  // 离散事件等属于同步任务，优先级高啊
+  flushSyncWorkOnAllRoots();
 }
 
 /**
@@ -196,6 +205,41 @@ function scheduleTaskForRootDuringMicrotask(
     root.callbackNode = newCallbackNode;
     return newCallbackPriority;
   }
+}
+
+export function flushSyncWorkOnAllRoots() {
+  flushSyncWorkAcrossRoots_impl();
+}
+
+function flushSyncWorkAcrossRoots_impl() {
+  if (isFlushingWork) {
+    return;
+  }
+
+  if (!mightHavePendingSyncWork) {
+    return;
+  }
+
+  let didPerformSomeWork;
+  isFlushingWork = true;
+  do {
+    didPerformSomeWork = false;
+    let root = firstScheduledRoot;
+    while (root !== null) {
+      const workInProgressRoot = getWorkInProgressRoot();
+      const workInProgressRootRenderLanes = getWorkInProgressRootRenderLanes();
+      const nextLanes = getNextLanes(
+        root,
+        root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
+      );
+      if (includesSyncLane(nextLanes)) {
+        didPerformSomeWork = true;
+        performSyncWorkOnRoot(root, nextLanes);
+      }
+      root = root.next;
+    }
+  } while (didPerformSomeWork);
+  isFlushingWork = false;
 }
 
 function scheduleCallback(

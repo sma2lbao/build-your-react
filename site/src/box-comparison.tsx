@@ -6,9 +6,7 @@ function BoxComparison() {
   const handleClick = () => {
     console.log("join", show);
     // bug: 事件触发的优先级有bug。暂时用 setTimeout 代替
-    setTimeout(() => {
-      setShow(!show);
-    });
+    setShow(!show);
   };
 
   return (

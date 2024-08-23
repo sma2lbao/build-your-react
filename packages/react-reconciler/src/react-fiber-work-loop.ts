@@ -186,6 +186,26 @@ export function scheduleUpdateOnFiber(
   ensureRootIsScheduled(root);
 }
 
+export function performSyncWorkOnRoot(root: FiberRoot, lanes: Lanes): null {
+  const didFlushPassiveEffects = flushPassiveEffects();
+  if (didFlushPassiveEffects) {
+    ensureRootIsScheduled(root);
+    return null;
+  }
+
+  let exitStatus = renderRootSync(root, lanes);
+
+  const finishedWork = root.current.alternate as Fiber;
+  root.finishedWork = finishedWork;
+  root.finishedLanes = lanes;
+
+  commitRoot(root, workInProgressDeferredLane);
+
+  ensureRootIsScheduled(root);
+
+  return null;
+}
+
 /**
  * 这是每个并发任务的入口点，即任何经过Scheduler的任务。
  * @param root
