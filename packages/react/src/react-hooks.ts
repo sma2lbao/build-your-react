@@ -39,6 +39,11 @@ export function useLayoutEffect(
   return dispatcher.useLayoutEffect(create, deps);
 }
 
+export function useMemo<T>(create: () => T, deps: Array<any> | void | null): T {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useMemo(create, deps);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

@@ -172,4 +172,5 @@ export type Dispatcher = {
     create: () => (() => void) | void,
     deps: Array<any> | void | null
   ): void;
+  useMemo<T>(create: () => T, deps: Array<any> | void | null): T;
 };

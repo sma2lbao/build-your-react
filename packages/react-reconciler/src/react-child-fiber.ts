@@ -256,6 +256,12 @@ function createChildReconciler(
         break;
       }
 
+      if (shouldTrackSideEffects) {
+        if (oldFiber && newFiber.alternate === null) {
+          deleteChild(returnFiber, oldFiber);
+        }
+      }
+
       lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
       if (previousNewFiber === null) {
         resultingFirstChild = newFiber;
@@ -306,6 +312,14 @@ function createChildReconciler(
         lanes
       );
       if (newFiber !== null) {
+        if (shouldTrackSideEffects) {
+          if (newFiber.alternate !== null) {
+            existingChildren.delete(
+              newFiber.key === null ? newIdx : newFiber.key
+            );
+          }
+        }
+
         lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
         if (previousNewFiber === null) {
           resultingFirstChild = newFiber;
@@ -315,6 +329,11 @@ function createChildReconciler(
 
         previousNewFiber = newFiber;
       }
+    }
+
+    // 更新阶段删除没有复用的节点
+    if (shouldTrackSideEffects) {
+      existingChildren.forEach((child) => deleteChild(returnFiber, child));
     }
 
     return resultingFirstChild;
@@ -479,6 +498,10 @@ function createChildReconciler(
   ): number {
     newFiber.index = newIndex;
 
+    if (!shouldTrackSideEffects) {
+      return lastPlacedIndex;
+    }
+
     const current = newFiber.alternate;
     if (current !== null) {
       const oldIndex = current.index;
@@ -552,4 +575,32 @@ function coerceRef(
   const ref = refProp !== undefined ? refProp : null;
 
   workInProgress.ref = ref;
+}
+
+export function cloneChildFibers(
+  current: Fiber | null,
+  worInProgress: Fiber
+): void {
+  if (current !== null && worInProgress.child !== current.child) {
+    throw new Error("Resuming work not yet implemented.");
+  }
+
+  if (worInProgress.child === null) {
+    return;
+  }
+
+  let currentChild = worInProgress.child;
+  let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
+  worInProgress.child = newChild;
+
+  newChild.return = worInProgress;
+  while (currentChild.sibling !== null) {
+    currentChild = currentChild.sibling;
+    newChild = newChild.sibling = createWorkInProgress(
+      currentChild,
+      currentChild.pendingProps
+    );
+    newChild.return = worInProgress;
+  }
+  newChild.sibling = null;
 }

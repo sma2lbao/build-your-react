@@ -62,7 +62,7 @@ export type Hook = {
 };
 
 type EffectInstance = {
-  destory: void | (() => void);
+  destroy: void | (() => void);
 };
 
 export type Effect = {
@@ -124,6 +124,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useEffect: mountEffect,
   useLayoutEffect: mountLayoutEffect,
   useRef: mountRef,
+  useMemo: mountMemo,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -132,6 +133,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useEffect: updateEffect,
   useLayoutEffect: updateLayoutEffect,
   useRef: updateRef,
+  useMemo: updateMemo,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -140,6 +142,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useEffect: updateEffect,
   useLayoutEffect: updateLayoutEffect,
   useRef: updateRef,
+  useMemo: updateMemo,
 };
 
 /**
@@ -741,6 +744,31 @@ function updateRef<T>(initialValue: T): { current: T } {
   return hook.memoizedState;
 }
 
+function mountMemo<T>(nextCreate: () => T, deps: Array<any> | void | null): T {
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const nextValue = nextCreate();
+
+  hook.memoizedState = [nextValue, nextDeps];
+  return nextValue;
+}
+
+function updateMemo<T>(nextCreate: () => T, deps: Array<any> | void | null): T {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const prevState = hook.memoizedState;
+
+  if (nextDeps !== null) {
+    const prevDeps: Array<any> | null = prevState[1];
+    if (areHookInputsEqual(nextDeps, prevDeps)) {
+      return prevState[0];
+    }
+  }
+  const nextValue = nextCreate();
+  hook.memoizedState = [nextValue, nextDeps];
+  return nextValue;
+}
+
 /**
  *
  * @param state
@@ -843,7 +871,7 @@ function renderWithHooksAgain<Props>(
 
 function createEffectInstance(): EffectInstance {
   return {
-    destory: undefined,
+    destroy: undefined,
   };
 }
 

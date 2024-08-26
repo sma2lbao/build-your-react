@@ -1,3 +1,4 @@
+import { REACT_MEMO_TYPE } from "shared/react-symbols";
 import { NoFlags, Placement } from "./react-fiber-flags";
 import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
 import { Fiber } from "./react-internal-types";
@@ -12,6 +13,7 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  MemoComponent,
   WorkTag,
 } from "./react-work-tags";
 import { ReactElement } from "shared/react-element-type";
@@ -68,8 +70,29 @@ export function createFiberFromTypeAndProps(
 ): Fiber {
   let fiberTag: WorkTag = FunctionComponent;
   let resolvedType = type;
-  if (typeof type === "string") {
+  if (typeof type === "function") {
+  } else if (typeof type === "string") {
     fiberTag = HostComponent;
+  } else {
+    getTag: switch (type) {
+      default: {
+        if (typeof type === "object" && type !== null) {
+          switch (type.$$typeof) {
+            case REACT_MEMO_TYPE:
+              fiberTag = MemoComponent;
+              break getTag;
+          }
+        }
+
+        const typeString = type === null ? "null" : typeof type;
+        resolvedType = null;
+        throw new Error(
+          "Element type is invalid: expected a string (for built-in " +
+            "components) or a class/function (for composite components) " +
+            `but got: ${typeString}`
+        );
+      }
+    }
   }
 
   const fiber = createFiber(fiberTag!, pendingProps, key, mode);
@@ -217,4 +240,17 @@ class FiberNode implements Fiber {
     this.pendingProps = pendingProps;
     this.mode = mode;
   }
+}
+
+export function isSimpleFunctionComponent(type: any): boolean {
+  return (
+    typeof type === "function" &&
+    !shouldConstruct(type) &&
+    type.defaultProps === undefined
+  );
+}
+
+function shouldConstruct(Component: Function) {
+  const prototype = Component.prototype;
+  return !!(prototype && prototype.isReactComponent);
 }

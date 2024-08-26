@@ -6,7 +6,9 @@ export type WorkTag =
   | typeof ClassComponent
   | typeof HostRoot
   | typeof HostComponent
-  | typeof HostText;
+  | typeof HostText
+  | typeof MemoComponent
+  | typeof SimpleMemoComponent;
 
 /**
  * 函数组件
@@ -32,3 +34,10 @@ export const HostComponent = 5;
  * 字符串
  */
 export const HostText = 6;
+
+/**
+ * 可缓存组件
+ */
+export const MemoComponent = 14;
+
+export const SimpleMemoComponent = 15;

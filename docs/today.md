@@ -39,3 +39,9 @@
 - 增加 ChildDeletion Flag
 
 - 支持事件绑定
+
+2024/08/26
+
+- 增加 useMemo Hook
+
+- 支持 style 及 className

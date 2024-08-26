@@ -15,12 +15,14 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  MemoComponent,
+  SimpleMemoComponent,
 } from "./react-work-tags";
 import {
   getRootHostContainer,
   popHostContainer,
 } from "./react-fiber-host-context";
-import { NoFlags, Update } from "./react-fiber-flags";
+import { NoFlags, StaticMask, Update } from "./react-fiber-flags";
 
 function markUpdate(workInProgress: Fiber) {
   workInProgress.flags |= Update;
@@ -44,6 +46,8 @@ export function completeWork(
       bubbleProperties(workInProgress);
       return null;
     }
+    case MemoComponent:
+    case SimpleMemoComponent:
     case FunctionComponent: {
       bubbleProperties(workInProgress);
       return null;
@@ -176,8 +180,14 @@ function bubbleProperties(completedWork: Fiber) {
       mergeLanes(child.lanes, child.childLanes)
     );
 
-    subtreeFlags |= child.subtreeFlags;
-    subtreeFlags |= child.flags;
+    if (!didBailout) {
+      subtreeFlags |= child.subtreeFlags;
+      subtreeFlags |= child.flags;
+    } else {
+      // 优化路径；如果没有变更便去除 标记
+      subtreeFlags |= child.subtreeFlags & StaticMask;
+      subtreeFlags |= child.flags & StaticMask;
+    }
 
     child.return = completedWork;
     child = child.sibling;

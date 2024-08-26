@@ -655,7 +655,7 @@ function commitRootImpl(root: FiberRoot, spawnedLane: Lane) {
       root,
       finishedWork
     );
-    // 在该函数中有 HookLayout 的判断，即同步执行 useLayoutEffect 的 destory 函数（有的话）
+    // 在该函数中有 HookLayout 的判断，即同步执行 useLayoutEffect 的 destroy 函数（有的话）
     commitMutationEffects(root, finishedWork, lanes);
 
     root.current = finishedWork;

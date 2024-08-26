@@ -10,6 +10,8 @@ import {
   getPublicInstance,
   insertBefore,
   insertInContainerBefore,
+  removeChild,
+  removeChildFromContainer,
   resetTextContent,
   supportsMutation,
 } from "react-fiber-config";
@@ -33,9 +35,12 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  MemoComponent,
+  SimpleMemoComponent,
 } from "./react-work-tags";
 import {
   HookFlags,
+  NoFlags as NoHookEffect,
   Layout as HookLayout,
   HasEffect as HookHasEffect,
   Passive as HookPassive,
@@ -47,6 +52,15 @@ import { FunctionComponentUpdateQueue } from "./react-fiber-hooks";
  * 下一个有副作用的Fiber
  */
 let nextEffect: Fiber | null = null;
+
+/**
+ * 用来删除fiber所需的原生父节点
+ */
+let hostParent: Instance | Container | null = null;
+/**
+ * 用来标识是否是 react container节点 。（id=root的节点）
+ */
+let hostParentIsContainer: boolean = false;
 
 /**
  * commit 阶段 mutation 阶段入口
@@ -74,6 +88,7 @@ function commitMutationEffectsOnFiber(
   root: FiberRoot,
   lanes: Lanes
 ) {
+  debugger;
   const current = finishedWork.alternate;
   const flags = finishedWork.flags;
 
@@ -83,6 +98,8 @@ function commitMutationEffectsOnFiber(
       commitReconciliationEffects(finishedWork);
       return;
     }
+    case MemoComponent:
+    case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
@@ -288,6 +305,7 @@ function commitLayoutEffectOnFiber(
       );
       break;
     }
+    case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraverseLayoutEffects(
         finishedRoot,
@@ -358,6 +376,14 @@ function recursivelyTraverseMutationEffects(
   const deletions = parentFiber.deletions;
   if (deletions !== null) {
     // 更新阶段才会出现
+    for (let i = 0; i < deletions.length; i++) {
+      const childToDelete = deletions[i];
+      try {
+        commitDeletionEffects(root, parentFiber, childToDelete);
+      } catch (error) {
+        throw new Error(`captureCommitPhaseError`);
+      }
+    }
   }
 
   if (parentFiber.subtreeFlags & MutationMask) {
@@ -436,11 +462,11 @@ function commitHookEffectListUnmount(
       if ((effect.tag & flags) === flags) {
         // 卸载阶段
         const inst = effect.inst;
-        const destory = inst.destory;
-        if (destory !== undefined) {
-          inst.destory = undefined;
+        const destroy = inst.destroy;
+        if (destroy !== undefined) {
+          inst.destroy = undefined;
           // 调用 副作用钩子函数 的 返回函数
-          safelyCallDestory(finishedWork, nearestMountedAncestor, destory);
+          safelyCallDestroy(finishedWork, nearestMountedAncestor, destroy);
         }
       }
       effect = effect.next;
@@ -471,8 +497,8 @@ function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
         const create = effect.create;
         const inst = effect.inst;
         // 执行 useEffect 传入函数
-        const destory = create();
-        inst.destory = destory;
+        const destroy = create();
+        inst.destroy = destroy;
       }
 
       effect = effect.next;
@@ -486,6 +512,7 @@ export function commitPassiveUnmountEffects(finishedWork: Fiber): void {
 
 function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
   switch (finishedWork.tag) {
+    case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraversePassiveUnmountEffects(finishedWork);
       if (finishedWork.flags & Passive) {
@@ -554,6 +581,7 @@ function commitPassiveMountOnFiber(
 ): void {
   const flags = finishedWork.flags;
   switch (finishedWork.tag) {
+    case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraversePassiveMountEffects(
         finishedRoot,
@@ -611,6 +639,7 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
   nearestMountedAncestor: Fiber | null
 ): void {
   switch (current.tag) {
+    case SimpleMemoComponent:
     case FunctionComponent: {
       commitHookPassiveUnmountEffects(
         current,
@@ -836,13 +865,13 @@ function commitAttachRef(finishedWork: Fiber) {
   }
 }
 
-function safelyCallDestory(
+function safelyCallDestroy(
   current: Fiber,
   nearestMountedAncestor: Fiber | null,
-  destory: () => void
+  destroy: () => void
 ) {
   try {
-    destory();
+    destroy();
   } catch (error) {
     throw new Error(`captureCommitPhaseError`);
   }
@@ -861,5 +890,155 @@ function safelyDetachRef(current: Fiber) {
 
   if (ref !== null) {
     ref.current = null;
+  }
+}
+
+function commitDeletionEffects(
+  root: FiberRoot,
+  returnFiber: Fiber,
+  deletedFiber: Fiber
+) {
+  if (supportsMutation) {
+    let parent: Fiber | null = returnFiber;
+    findParent: while (parent !== null) {
+      switch (parent.tag) {
+        case HostComponent: {
+          hostParent = parent.stateNode;
+          hostParentIsContainer = false;
+          break findParent;
+        }
+        case HostRoot: {
+          hostParent = parent.stateNode.containerInfo;
+          hostParentIsContainer = true;
+          break findParent;
+        }
+      }
+      parent = parent.return;
+    }
+
+    if (hostParent === null) {
+      throw new Error(
+        "Expected to find a host parent. This error is likely caused by " +
+          "a bug in React. Please file an issue."
+      );
+    }
+
+    commitDeletionEffectsOnFiber(root, returnFiber, deletedFiber);
+
+    // 重置
+    hostParent = null;
+    hostParentIsContainer = false;
+  }
+
+  detachFiberMutation(deletedFiber);
+}
+
+function detachFiberMutation(fiber: Fiber) {
+  const alternate = fiber.alternate;
+  if (alternate !== null) {
+    alternate.return = null;
+  }
+  fiber.return = null;
+}
+
+function commitDeletionEffectsOnFiber(
+  finishedRoot: FiberRoot,
+  nearestMountedAncestor: Fiber,
+  deletedFiber: Fiber
+) {
+  switch (deletedFiber.tag) {
+    case HostComponent: {
+      safelyDetachRef(deletedFiber);
+      // 需要到 HostText case 中
+    }
+    case HostText: {
+      if (supportsMutation) {
+        const prevHostParent = hostParent;
+        const prevHostParentIsContainer = hostParentIsContainer;
+        hostParent = null;
+        recursivelyTraverseDeletionEffects(
+          finishedRoot,
+          nearestMountedAncestor,
+          deletedFiber
+        );
+        hostParent = prevHostParent;
+        hostParentIsContainer = prevHostParentIsContainer;
+
+        if (hostParent !== null) {
+          if (hostParentIsContainer) {
+            removeChildFromContainer(hostParent, deletedFiber.stateNode);
+          } else {
+            removeChild(hostParent as any, deletedFiber.stateNode);
+          }
+        }
+      }
+      return;
+    }
+    case MemoComponent:
+    case SimpleMemoComponent:
+    case FunctionComponent: {
+      // 非离屏下类似 vue keep-alive
+      // 找到需要执行 destroy 回调函数的hook
+      const updateQueue: FunctionComponentUpdateQueue | null =
+        deletedFiber.updateQueue;
+      if (updateQueue !== null) {
+        const lastEffect = updateQueue.lastEffect;
+        if (lastEffect !== null) {
+          const firstEffect = lastEffect.next;
+
+          let effect = firstEffect;
+          do {
+            const tag = effect.tag;
+            const inst = effect.inst;
+            const destroy = inst.destroy;
+            if (destroy !== undefined) {
+              if ((tag & HookInsertion) !== NoHookEffect) {
+                inst.destroy = undefined;
+                safelyCallDestroy(
+                  deletedFiber,
+                  nearestMountedAncestor,
+                  destroy
+                );
+              } else if ((tag & HookLayout) !== NoHookEffect) {
+                inst.destroy = undefined;
+                safelyCallDestroy(
+                  deletedFiber,
+                  nearestMountedAncestor,
+                  destroy
+                );
+              }
+            }
+            effect = effect.next;
+          } while (effect !== firstEffect);
+        }
+      }
+
+      recursivelyTraverseDeletionEffects(
+        finishedRoot,
+        nearestMountedAncestor,
+        deletedFiber
+      );
+      return;
+    }
+    default: {
+      recursivelyTraverseDeletionEffects(
+        finishedRoot,
+        nearestMountedAncestor,
+        deletedFiber
+      );
+      return;
+    }
+  }
+}
+
+function recursivelyTraverseDeletionEffects(
+  finishedRoot: FiberRoot,
+  nearestMountedAncestor: Fiber,
+  parent: Fiber
+) {
+  let child = parent.child;
+  while (child !== null) {
+    commitDeletionEffectsOnFiber(finishedRoot, nearestMountedAncestor, child);
+    child = child.sibling;
   }
 }

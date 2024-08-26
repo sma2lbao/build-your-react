@@ -1,6 +1,10 @@
 import { shouldSetTextContent } from "react-fiber-config";
-import { mountChildFibers, reconcileChildFibers } from "./react-child-fiber";
-import { Lanes, NoLanes } from "./react-fiber-lane";
+import {
+  cloneChildFibers,
+  mountChildFibers,
+  reconcileChildFibers,
+} from "./react-child-fiber";
+import { Lanes, NoLanes, includesSomeLane } from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
@@ -8,6 +12,8 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  MemoComponent,
+  SimpleMemoComponent,
 } from "./react-work-tags";
 import { pushHostContainer } from "./react-fiber-host-context";
 import {
@@ -19,6 +25,13 @@ import {
   replaySuspendedComponentWithHooks,
 } from "./react-fiber-hooks";
 import { ContentReset, Ref } from "./react-fiber-flags";
+import {
+  createFiberFromTypeAndProps,
+  createWorkInProgress,
+  isSimpleFunctionComponent,
+} from "./react-fiber";
+import shallowEqual from "shared/shallow-equal";
+import { markSkippedUpdateLanes } from "./react-fiber-work-loop";
 
 let didReceiveUpdate: boolean = false;
 
@@ -53,6 +66,26 @@ export function beginWork(
   switch (workInProgress.tag) {
     case HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
+    case MemoComponent: {
+      const type = workInProgress.type;
+      const unresolvedProps = workInProgress.pendingProps;
+      return updateMemoComponent(
+        current,
+        workInProgress,
+        type,
+        unresolvedProps,
+        renderLanes
+      );
+    }
+    case SimpleMemoComponent: {
+      return updateSimpleMemoComponent(
+        current,
+        workInProgress,
+        workInProgress.type,
+        workInProgress.pendingProps,
+        renderLanes
+      );
+    }
     case FunctionComponent: {
       const Component = workInProgress.type;
       const unresolvedProps = workInProgress.pendingProps;
@@ -183,6 +216,103 @@ function updateHostText(current: null | Fiber, workInProgress: Fiber) {
   return null;
 }
 
+function updateMemoComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+): Fiber | null {
+  if (current === null) {
+    const type = Component.type;
+    if (isSimpleFunctionComponent(type) && Component.compare === null) {
+      let resolvedType = type;
+
+      workInProgress.tag = SimpleMemoComponent;
+      workInProgress.type = resolvedType;
+
+      return updateSimpleMemoComponent(
+        current,
+        workInProgress,
+        resolvedType,
+        nextProps,
+        renderLanes
+      );
+    }
+
+    const child = createFiberFromTypeAndProps(
+      Component.type,
+      null,
+      nextProps,
+      workInProgress,
+      workInProgress.mode,
+      renderLanes
+    );
+
+    child.ref = workInProgress.ref;
+    child.return = workInProgress;
+    workInProgress.child = child;
+    return child;
+  }
+
+  const currentChild = current.child as Fiber;
+  const hasScheduledUpdateOrContext = checkScheduledUpdateOrContext(
+    current,
+    renderLanes
+  );
+  if (!hasScheduledUpdateOrContext) {
+    const prevProps = currentChild.memoizedProps;
+    let compare = Component.compare;
+    compare = compare !== null ? compare : shallowEqual;
+    if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
+      return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+    }
+  }
+
+  const newChild = createWorkInProgress(currentChild, nextProps);
+  newChild.ref = workInProgress.ref;
+  newChild.return = workInProgress;
+  workInProgress.child = newChild;
+  return newChild;
+}
+
+function updateSimpleMemoComponent(
+  current: Fiber | null,
+  worInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+): Fiber | null {
+  if (current !== null) {
+    const prevProps = current.memoizedProps;
+    if (
+      shallowEqual(prevProps, nextProps) &&
+      current.ref === worInProgress.ref
+    ) {
+      didReceiveUpdate = false;
+
+      worInProgress.pendingProps = nextProps = prevProps;
+
+      if (!checkScheduledUpdateOrContext(current, renderLanes)) {
+        worInProgress.lanes = current.lanes;
+        return bailoutOnAlreadyFinishedWork(
+          current,
+          worInProgress,
+          renderLanes
+        );
+      }
+    }
+  }
+
+  return updateFunctionComponent(
+    current,
+    worInProgress,
+    Component,
+    nextProps,
+    renderLanes
+  );
+}
+
 /**
  * 记录FiberRoot的container; 用于completeWork中获取container 创建 真实dom
  * @param workInProgress
@@ -234,4 +364,42 @@ function markRef(current: Fiber | null, workInProgress: Fiber) {
       workInProgress.flags |= Ref;
     }
   }
+}
+
+function checkScheduledUpdateOrContext(
+  current: Fiber,
+  renderLanes: Lanes
+): boolean {
+  const updateLanes = current.lanes;
+  if (includesSomeLane(updateLanes, renderLanes)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * 优化路径
+ * @param current
+ * @param workInProgress
+ * @param renderLanes
+ * @returns
+ */
+function bailoutOnAlreadyFinishedWork(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  renderLanes: Lanes
+): Fiber | null {
+  if (current !== null) {
+    // workInProgress.dependencies = current.dependencies;
+  }
+
+  markSkippedUpdateLanes(workInProgress.lanes);
+
+  if (!includesSomeLane(renderLanes, workInProgress.childLanes)) {
+    return null;
+  }
+
+  cloneChildFibers(current, workInProgress);
+  return workInProgress.child;
 }

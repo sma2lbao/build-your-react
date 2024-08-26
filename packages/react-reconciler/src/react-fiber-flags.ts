@@ -39,6 +39,12 @@ export const HostEffectMask = 0b0000000000000111111111111111;
 
 export const Incomplete = 0b0000000000001000000000000000;
 
+export const LayoutStatic = 0b0000010000000000000000000000;
+
+export const PassiveStatic = 0b0000100000000000000000000000;
+
+export const RefStatic = 0b0000001000000000000000000000;
+
 export const BeforeMutationMask = Update | ChildDeletion;
 
 export const MutationMask =
@@ -47,3 +53,7 @@ export const MutationMask =
 export const LayoutMask = Update | Ref;
 
 export const PassiveMask = Passive | ChildDeletion;
+
+// 不被克隆重置的标签的联合。
+// 这允许某些概念持续存在而无需重新计算它们，例如子树是否包含被动效果或门户。
+export const StaticMask = LayoutStatic | PassiveStatic | RefStatic;

@@ -187,3 +187,21 @@ export function commitTextUpdate(
 export function getPublicInstance(instance: Instance) {
   return instance;
 }
+
+export function removeChild(
+  parentInstance: Instance,
+  child: Instance | TextInstance
+): void {
+  parentInstance.removeChild(child);
+}
+
+export function removeChildFromContainer(
+  container: Container,
+  child: Instance | TextInstance
+): void {
+  if (container.nodeType === COMMENT_NODE) {
+    container.parentNode?.removeChild(child);
+  } else {
+    container.removeChild(child);
+  }
+}

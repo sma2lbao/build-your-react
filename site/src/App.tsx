@@ -1,20 +1,26 @@
-import * as React from "react";
+import { useState } from "react";
+import { createTodos } from "./utils.ts";
+import TodoList from "./todo-list.tsx";
 
-function App() {
-  // const [number, setNumber] = React.useState(1);
-  const numRef = React.useRef(0);
-  const h1Ref = React.useRef<HTMLHeadingElement | null>(null);
+const todos = createTodos();
 
-  function handleClick() {
-    numRef.current = numRef.current + 1;
-    console.log("numRef: ", numRef.current);
-    console.log("h1Ref: ", h1Ref.current);
-  }
+export default function App() {
+  const [tab, setTab] = useState("all");
+  const [isDark, setIsDark] = useState(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).handleClick = handleClick;
+  const handleThemeChange = () => {
+    setIsDark(!isDark);
+  };
 
-  return <h1 ref={h1Ref}>测试啊</h1>;
+  return (
+    <div>
+      <button onClick={() => setTab("all")}>All</button>
+      <button onClick={() => setTab("active")}>Active</button>
+      <button onClick={() => setTab("completed")}>Completed</button>
+      <br />
+      <button onClick={handleThemeChange}>改变主题</button>
+      <hr />
+      <TodoList todos={todos} tab={tab} theme={isDark ? "dark" : "light"} />
+    </div>
+  );
 }
-
-export default App;

@@ -246,6 +246,10 @@ export function includesOnlyNonUrgentLanes(lanes: Lanes): boolean {
   return (lanes & UrgentLanes) === NoLanes;
 }
 
+export function includesSomeLane(a: Lanes | Lane, b: Lanes | Lane): boolean {
+  return (a & b) !== NoLanes;
+}
+
 /**
  * 合并优先级通道
  * @param a
