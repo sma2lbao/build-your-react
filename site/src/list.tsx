@@ -17,7 +17,9 @@ function List(props: ListProps) {
   return (
     <ul>
       {items.map((item) => (
-        <li key={item.id}>{item.completed ? <s>{item.text}</s> : item.text}</li>
+        <li style={{ fontSize: 20 }} key={item.id}>
+          {item.completed ? <s>{item.text}</s> : item.text}
+        </li>
       ))}
     </ul>
   );

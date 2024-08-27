@@ -1,3 +1,6 @@
+import sanitizeURL from "../shared/sanitize-url";
+import { setValueForStyles } from "./css-property-operations";
+import { setValueForKnownAttribute } from "./dom-property-operations";
 import { setTextContent } from "./set-text-content";
 
 export function setInitialProperties(
@@ -5,6 +8,7 @@ export function setInitialProperties(
   tag: string,
   props: any
 ): void {
+  debugger;
   for (const propKey in props) {
     const propValue = props[propKey];
     if (propValue == null) {
@@ -14,6 +18,15 @@ export function setInitialProperties(
   }
 }
 
+/**
+ * 给原生DOM添加属性
+ * @param domElement
+ * @param tag
+ * @param key
+ * @param value
+ * @param props
+ * @param prevValue
+ */
 function setProp(
   domElement: Element,
   tag: string,
@@ -36,6 +49,34 @@ function setProp(
           setTextContent(domElement, "" + value);
         }
       }
+      break;
+    }
+    case "className":
+      setValueForKnownAttribute(domElement, "class", value);
+      break;
+    case "style": {
+      setValueForStyles(domElement as HTMLElement, value, prevValue);
+      break;
+    }
+    case "width":
+    case "height": {
+      setValueForKnownAttribute(domElement, key, value);
+      break;
+    }
+    case "src":
+    case "href": {
+      if (
+        value == null ||
+        typeof value === "function" ||
+        typeof value === "symbol" ||
+        typeof value === "boolean"
+      ) {
+        domElement.removeAttribute(key);
+        break;
+      }
+
+      const sanitizedValue = sanitizeURL("" + value);
+      domElement.setAttribute(key, sanitizedValue);
       break;
     }
   }
