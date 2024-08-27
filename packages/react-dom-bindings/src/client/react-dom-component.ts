@@ -8,7 +8,6 @@ export function setInitialProperties(
   tag: string,
   props: any
 ): void {
-  debugger;
   for (const propKey in props) {
     const propValue = props[propKey];
     if (propValue == null) {

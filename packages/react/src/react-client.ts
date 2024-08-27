@@ -1,6 +1,7 @@
 import { createElement } from "./jsx/react-jsx-element";
 import { memo } from "./react-memo";
 import {
+  useReducer,
   useState,
   useRef,
   useEffect,
@@ -15,6 +16,7 @@ import ReactSharedInternals from "./react-shared-internals-client";
 export {
   memo,
   createElement,
+  useReducer,
   useState,
   useRef,
   useEffect,

@@ -162,6 +162,11 @@ type Dispatch<A> = (action: A) => void;
 
 export type Dispatcher = {
   useId(): string;
+  useReducer<S, I, A>(
+    reducer: (state: S, action: A) => S,
+    initialArg: I,
+    init?: (i: I) => S
+  ): [S, Dispatch<A>];
   useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
   useDeferredValue<T>(value: T, initialValue?: T): T;
   useRef<T>(initialValue: T): { current: T };

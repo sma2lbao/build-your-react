@@ -133,6 +133,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useMemo: mountMemo,
   useCallback: mountCallback,
   useId: mountId,
+  useReducer: mountReducer,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -144,6 +145,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useMemo: updateMemo,
   useCallback: updateCallback,
   useId: updateId,
+  useReducer: updateReducer,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -155,6 +157,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useMemo: updateMemo,
   useCallback: updateCallback,
   useId: updateId,
+  useReducer: rerenderReducer,
 };
 
 /**
@@ -241,6 +244,32 @@ function dispatchSetState<S, A>(
       }
     }
 
+    const root = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
+    if (root !== null) {
+      scheduleUpdateOnFiber(root, fiber, lane);
+    }
+  }
+}
+
+function dispatchReducerAction<S, A>(
+  fiber: Fiber,
+  queue: UpdateQueue<S, A>,
+  action: A
+): void {
+  const lane = requestUpdateLane();
+
+  const update: Update<S, A> = {
+    lane,
+    revertLane: NoLane,
+    action,
+    hasEagerState: false,
+    eagerState: null,
+    next: null as any,
+  };
+
+  if (isRenderPhaseUpdate(fiber)) {
+    enqueueRenderPhaseUpdate(queue, update);
+  } else {
     const root = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
     if (root !== null) {
       scheduleUpdateOnFiber(root, fiber, lane);
@@ -344,9 +373,51 @@ function updateState<S>(
   return updateReducer(basicStateReducer, initialState);
 }
 
+/**
+ * 在组件的顶层作用域调用 useReducer 以创建一个用于管理状态的 reducer
+ * @param reducer 用于更新 state 的纯函数。参数为 state 和 action，返回值是更新后的 state。
+ * @param initialArg 用于初始化 state 的任意值。初始值的计算逻辑取决于接下来的 init 参数。
+ * @param init 用于计算初始值的函数。如果存在，使用 init(initialArg) 的执行结果作为初始值，否则使用 initialArg。
+ * @returns
+ */
+function mountReducer<S, I, A>(
+  reducer: (state: S, action: A) => S,
+  initialArg: I,
+  init?: (i: I) => S
+): [S, Dispatch<A>] {
+  const hook = mountWorkInProgressHook();
+  let initialState;
+  if (init !== undefined) {
+    initialState = init(initialArg);
+  } else {
+    initialState = initialArg;
+  }
+
+  hook.memoizedState = hook.baseState = initialState;
+
+  const queue: UpdateQueue<S, A> = {
+    pending: null,
+    lanes: NoLanes,
+    dispatch: null,
+    lastRenderedReducer: reducer,
+    lastRenderedState: initialState as S,
+  };
+
+  hook.queue = queue;
+  const dispatch: Dispatch<A> = (queue.dispatch = dispatchReducerAction.bind<
+    null,
+    [fiber: Fiber, queue: UpdateQueue<S, A>],
+    [action: A],
+    void
+  >(null, currentlyRenderingFiber!, queue));
+
+  return [hook.memoizedState, dispatch];
+}
+
 function updateReducer<S, I, A>(
   reducer: (state: S, action: A) => S,
-  initialArg: I
+  initialArg: I,
+  init?: (i: I) => S
 ): [S, Dispatch<A>] {
   const hook = updateWorkInProgressHook();
   return updateReducerImpl(hook, currentHook!, reducer);

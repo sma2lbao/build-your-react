@@ -54,6 +54,15 @@ export function useId(): string {
   return dispatcher.useId();
 }
 
+export function useReducer<S, I, A>(
+  reducer: (s: S, a: A) => S,
+  initialArg: I,
+  init?: (i: I) => S
+): [S, Dispatch<A>] {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useReducer(reducer, initialArg, init);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

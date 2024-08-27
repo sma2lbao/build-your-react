@@ -88,7 +88,6 @@ function commitMutationEffectsOnFiber(
   root: FiberRoot,
   lanes: Lanes
 ) {
-  debugger;
   const current = finishedWork.alternate;
   const flags = finishedWork.flags;
 

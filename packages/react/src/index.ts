@@ -1,6 +1,7 @@
 export {
   memo,
   createElement,
+  useReducer,
   useState,
   useRef,
   useEffect,
