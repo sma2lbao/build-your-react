@@ -49,6 +49,11 @@ export function useCallback<T>(callback: T, deps: Array<any> | void | null): T {
   return dispatcher.useCallback(callback, deps);
 }
 
+export function useId(): string {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useId();
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

@@ -8,6 +8,7 @@ import {
   useMemo,
   useCallback,
   useDeferredValue,
+  useId,
 } from "./react-hooks";
 import ReactSharedInternals from "./react-shared-internals-client";
 
@@ -21,5 +22,6 @@ export {
   useMemo,
   useCallback,
   useDeferredValue,
+  useId,
   ReactSharedInternals as __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
 };

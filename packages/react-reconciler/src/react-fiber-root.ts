@@ -69,6 +69,11 @@ class FiberRootNode implements Omit<FiberRoot, "current"> {
   expiredLanes = NoLanes;
   finishedLanes = NoLanes;
 
+  /**
+   * useId 有使用到，用来当做前缀
+   */
+  identifierPrefix = "";
+
   constructor(containerInfo: Container, tag: RootTag) {
     this.containerInfo = containerInfo;
     this.tag = tag;

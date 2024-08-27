@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { createTodos } from "./utils.ts";
 import TodoList from "./todo-list.tsx";
 
@@ -7,6 +7,9 @@ const todos = createTodos();
 export default function App() {
   const [tab, setTab] = useState("all");
   const [isDark, setIsDark] = useState(false);
+  const id = useId();
+
+  console.log("id: ", id);
 
   const handleThemeChange = () => {
     setIsDark(!isDark);

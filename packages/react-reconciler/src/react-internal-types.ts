@@ -161,6 +161,7 @@ type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
 
 export type Dispatcher = {
+  useId(): string;
   useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>];
   useDeferredValue<T>(value: T, initialValue?: T): T;
   useRef<T>(initialValue: T): { current: T };

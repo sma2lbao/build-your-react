@@ -14,12 +14,13 @@ import {
 } from "./react-fiber-lane";
 import { ThenableState } from "./react-fiber-thenable";
 import {
+  getWorkInProgressRoot,
   markSkippedUpdateLanes,
   requestDeferredLane,
   requestUpdateLane,
   scheduleUpdateOnFiber,
 } from "./react-fiber-work-loop";
-import { Dispatcher, Fiber } from "./react-internal-types";
+import { Dispatcher, Fiber, FiberRoot } from "./react-internal-types";
 import ReactSharedInternals from "shared/react-shared-internals";
 import {
   Flags,
@@ -116,6 +117,11 @@ let didScheduleRenderPhaseUpdateDuringThisPass: boolean = false;
 let thenableIndexCounter: number = 0;
 let thenableState: ThenableState | null = null;
 
+/**
+ * 用于 useId hook 的 id 生成
+ */
+let globalClientIdCounter: number = 0;
+
 const RE_RENDER_LIMIT = 25;
 
 const HooksDispatcherOnMount: Dispatcher = {
@@ -126,6 +132,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useRef: mountRef,
   useMemo: mountMemo,
   useCallback: mountCallback,
+  useId: mountId,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -136,6 +143,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useRef: updateRef,
   useMemo: updateMemo,
   useCallback: updateCallback,
+  useId: updateId,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -146,6 +154,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useRef: updateRef,
   useMemo: updateMemo,
   useCallback: updateCallback,
+  useId: updateId,
 };
 
 /**
@@ -791,6 +800,30 @@ function updateCallback<T>(callback: T, deps: Array<any> | void | null): T {
   }
   hook.memoizedState = [callback, nextDeps];
   return callback;
+}
+
+function mountId(): string {
+  const hook = mountWorkInProgressHook();
+
+  const root = getWorkInProgressRoot() as FiberRoot;
+
+  // TODO 前缀，FiberRoot待实现
+  const identifierPrefix = root.identifierPrefix;
+  const globalClientId = globalClientIdCounter++;
+  const id = ":" + identifierPrefix + "r" + globalClientId.toString(32) + ":";
+
+  hook.memoizedState = id;
+  return id;
+}
+
+/**
+ * id 在首次渲染阶段生成后不再改变
+ * @returns
+ */
+function updateId(): string {
+  const hook = updateWorkInProgressHook();
+  const id: string = hook.memoizedState;
+  return id;
 }
 
 /**
