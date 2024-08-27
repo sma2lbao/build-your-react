@@ -173,4 +173,5 @@ export type Dispatcher = {
     deps: Array<any> | void | null
   ): void;
   useMemo<T>(create: () => T, deps: Array<any> | void | null): T;
+  useCallback<T>(callback: T, deps: Array<any> | void | null): T;
 };

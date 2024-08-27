@@ -44,6 +44,11 @@ export function useMemo<T>(create: () => T, deps: Array<any> | void | null): T {
   return dispatcher.useMemo(create, deps);
 }
 
+export function useCallback<T>(callback: T, deps: Array<any> | void | null): T {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useCallback(callback, deps);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 
