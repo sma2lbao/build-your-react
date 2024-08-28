@@ -64,16 +64,22 @@ export function beginWork(
     if (oldProps !== newProps) {
       didReceiveUpdate = true;
     } else {
+      // props 相同
+
       const hasScheduledUpdateOrContext = checkScheduledUpdateOrContext(
         current,
         renderLanes
       );
 
       if (!hasScheduledUpdateOrContext) {
+        // 没有相同的更新任务
         // 优化路径-防止重复渲染
         didReceiveUpdate = false;
-        // TODO
-        // return attemptEarlyBailoutIfNoScheduledUpdate
+        return attemptEarlyBailoutIfNoScheduledUpdate(
+          current,
+          workInProgress,
+          renderLanes
+        );
       }
 
       didReceiveUpdate = false;
@@ -451,6 +457,14 @@ function markRef(current: Fiber | null, workInProgress: Fiber) {
   }
 }
 
+/**
+ * 用于检查当前的 Fiber 是否有与给定渲染优先级相匹配的更新。
+ * 如果匹配，返回 true，否则返回 false。
+ * 这种检查在 React 的调度和更新机制中非常重要，确保只处理必要的更新，从而提高性能。
+ * @param current
+ * @param renderLanes
+ * @returns
+ */
 function checkScheduledUpdateOrContext(
   current: Fiber,
   renderLanes: Lanes
@@ -488,4 +502,19 @@ function bailoutOnAlreadyFinishedWork(
 
   cloneChildFibers(current, workInProgress);
   return workInProgress.child;
+}
+
+function attemptEarlyBailoutIfNoScheduledUpdate(
+  current: Fiber,
+  worInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  switch (worInProgress.tag) {
+    case HostRoot:
+      pushHostRootContext(worInProgress);
+      // TODO
+      break;
+  }
+
+  return bailoutOnAlreadyFinishedWork(current, worInProgress, renderLanes);
 }

@@ -65,3 +65,5 @@
 - 增加 Context.Provider
 
 - 增加 Context.Consumer
+
+- 完善渲染流程的路径优化
