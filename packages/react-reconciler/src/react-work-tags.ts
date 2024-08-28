@@ -7,6 +7,8 @@ export type WorkTag =
   | typeof HostRoot
   | typeof HostComponent
   | typeof HostText
+  | typeof ContextConsumer
+  | typeof ContextProvider
   | typeof MemoComponent
   | typeof SimpleMemoComponent;
 
@@ -35,9 +37,16 @@ export const HostComponent = 5;
  */
 export const HostText = 6;
 
+export const ContextConsumer = 9;
+
+export const ContextProvider = 10;
+
 /**
  * 可缓存组件
  */
 export const MemoComponent = 14;
 
+/**
+ * 可缓存浅比较函数组件
+ */
 export const SimpleMemoComponent = 15;

@@ -4,7 +4,7 @@ import { Lane, Lanes } from "./react-fiber-lane";
 import { RootTag } from "./react-root-tags";
 import { WorkTag } from "./react-work-tags";
 import { TypeOfMode } from "./react-type-of-mode";
-import { RefObject } from "shared/react-types";
+import { ReactContext, RefObject } from "shared/react-types";
 
 export interface Fiber {
   /**
@@ -66,6 +66,11 @@ export interface Fiber {
    * FunctionComponent 组件指向 第一个 HOOK
    */
   memoizedState: any;
+
+  /**
+   * useContext 需要用到，用来指向 context 链表
+   */
+  dependencies: Dependencies | null;
 
   mode: TypeOfMode;
 
@@ -161,6 +166,7 @@ type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
 
 export type Dispatcher = {
+  readContext<T>(context: ReactContext<T>): T;
   useId(): string;
   useReducer<S, I, A>(
     reducer: (state: S, action: A) => S,
@@ -180,4 +186,18 @@ export type Dispatcher = {
   ): void;
   useMemo<T>(create: () => T, deps: Array<any> | void | null): T;
   useCallback<T>(callback: T, deps: Array<any> | void | null): T;
+  useContext<T>(context: ReactContext<T>): T;
+};
+
+export type ContextDependency<T> = {
+  context: ReactContext<T>;
+  next: ContextDependency<any> | null;
+  memoizedValue: T;
+  [key: string]: any;
+};
+
+export type Dependencies = {
+  lanes: Lanes;
+  firstContext: ContextDependency<any> | null;
+  [key: string]: any;
 };

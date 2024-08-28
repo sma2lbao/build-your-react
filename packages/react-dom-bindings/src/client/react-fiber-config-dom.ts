@@ -40,6 +40,11 @@ export const supportsMutation = true;
 export const scheduleMicrotask = queueMicrotask;
 
 /**
+ * useContext 中有用到
+ */
+export const isPrimaryRenderer = true;
+
+/**
  * 创建文本节点
  * @param text
  * @param rootContainerInstance

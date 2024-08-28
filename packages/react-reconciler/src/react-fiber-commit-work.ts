@@ -717,6 +717,7 @@ function detachFiberAfterEffects(fiber: Fiber) {
   fiber.stateNode = null;
 
   fiber.return = null;
+  fiber.dependencies = null;
   fiber.memoizedProps = null;
   fiber.memoizedState = null;
   fiber.pendingProps = null;

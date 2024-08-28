@@ -11,6 +11,7 @@ import {
   includesOnlyNonUrgentLanes,
   isSubsetOfLanes,
   mergeLanes,
+  removeLanes,
 } from "./react-fiber-lane";
 import { ThenableState } from "./react-fiber-thenable";
 import {
@@ -33,6 +34,7 @@ import {
   Layout as HookLayout,
   HasEffect as HookHasEffect,
 } from "./react-hook-effect-tags";
+import { readContext } from "./react-fiber-new-context";
 
 type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
@@ -125,6 +127,8 @@ let globalClientIdCounter: number = 0;
 const RE_RENDER_LIMIT = 25;
 
 const HooksDispatcherOnMount: Dispatcher = {
+  readContext,
+
   useState: mountState,
   useDeferredValue: mountDeferredValue,
   useEffect: mountEffect,
@@ -134,9 +138,12 @@ const HooksDispatcherOnMount: Dispatcher = {
   useCallback: mountCallback,
   useId: mountId,
   useReducer: mountReducer,
+  useContext: readContext,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
+  readContext,
+
   useState: updateState,
   useDeferredValue: updateDeferredValue,
   useEffect: updateEffect,
@@ -146,9 +153,12 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useCallback: updateCallback,
   useId: updateId,
   useReducer: updateReducer,
+  useContext: readContext,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
+  readContext,
+
   useState: rerenderState,
   useDeferredValue: rerenderDeferredValue,
   useEffect: updateEffect,
@@ -158,6 +168,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useCallback: updateCallback,
   useId: updateId,
   useReducer: rerenderReducer,
+  useContext: readContext,
 };
 
 /**
@@ -178,6 +189,7 @@ export function renderWithHooks<Props, SecondArg>(
   secondArg: SecondArg,
   nextRenderLanes: Lanes
 ): any {
+  debugger;
   renderLanes = nextRenderLanes;
   currentlyRenderingFiber = workInProgress;
 
@@ -1023,4 +1035,20 @@ function areHookInputsEqual(
   }
 
   return true;
+}
+
+/**
+ * 优化路径-复用updateQueue，去除 PassiveEffect 及 UpdateEffect 以及 lanes
+ * @param current
+ * @param worInProgress
+ * @param lanes
+ */
+export function bailoutHooks(
+  current: Fiber,
+  worInProgress: Fiber,
+  lanes: Lanes
+): void {
+  worInProgress.updateQueue = current.updateQueue;
+  worInProgress.flags &= ~(PassiveEffect | UpdateEffect);
+  current.lanes = removeLanes(current.lanes, lanes);
 }

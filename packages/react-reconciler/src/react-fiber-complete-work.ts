@@ -11,6 +11,8 @@ import {
 import { Lanes, NoLanes, mergeLanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
+  ContextConsumer,
+  ContextProvider,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -23,6 +25,8 @@ import {
   popHostContainer,
 } from "./react-fiber-host-context";
 import { NoFlags, StaticMask, Update } from "./react-fiber-flags";
+import { ReactContext } from "shared/react-types";
+import { popProvider } from "./react-fiber-new-context";
 
 function markUpdate(workInProgress: Fiber) {
   workInProgress.flags |= Update;
@@ -46,6 +50,7 @@ export function completeWork(
       bubbleProperties(workInProgress);
       return null;
     }
+    case ContextConsumer:
     case MemoComponent:
     case SimpleMemoComponent:
     case FunctionComponent: {
@@ -117,6 +122,12 @@ export function completeWork(
         );
       }
 
+      bubbleProperties(workInProgress);
+      return null;
+    }
+    case ContextProvider: {
+      const context: ReactContext<any> = workInProgress.type;
+      popProvider(context, workInProgress);
       bubbleProperties(workInProgress);
       return null;
     }

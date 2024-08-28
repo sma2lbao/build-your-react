@@ -1,7 +1,11 @@
-import { REACT_MEMO_TYPE } from "shared/react-symbols";
+import {
+  REACT_CONSUMER_TYPE,
+  REACT_CONTEXT_TYPE,
+  REACT_MEMO_TYPE,
+} from "shared/react-symbols";
 import { NoFlags, Placement } from "./react-fiber-flags";
-import { Lane, Lanes, NoLanes } from "./react-fiber-lane";
-import { Fiber } from "./react-internal-types";
+import { Lanes, NoLanes } from "./react-fiber-lane";
+import { Dependencies, Fiber } from "./react-internal-types";
 import {
   ConcurrentMode,
   StrictEffectsMode,
@@ -9,6 +13,8 @@ import {
   TypeOfMode,
 } from "./react-type-of-mode";
 import {
+  ContextConsumer,
+  ContextProvider,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -78,6 +84,12 @@ export function createFiberFromTypeAndProps(
       default: {
         if (typeof type === "object" && type !== null) {
           switch (type.$$typeof) {
+            case REACT_CONTEXT_TYPE:
+              fiberTag = ContextProvider;
+              break getTag;
+            case REACT_CONSUMER_TYPE:
+              fiberTag = ContextConsumer;
+              break getTag;
             case REACT_MEMO_TYPE:
               fiberTag = MemoComponent;
               break getTag;
@@ -141,6 +153,15 @@ export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
   workInProgress.memoizedState = current.memoizedState;
   workInProgress.updateQueue = current.updateQueue;
 
+  const currentDependencies = current.dependencies;
+  workInProgress.dependencies =
+    currentDependencies === null
+      ? null
+      : {
+          lanes: currentDependencies.lanes,
+          firstContext: currentDependencies.firstContext,
+        };
+
   workInProgress.sibling = current.sibling;
   workInProgress.index = current.index;
   workInProgress.ref = current.ref;
@@ -165,6 +186,8 @@ export function resetWorkInProgress(
     workInProgress.memoizedState = null;
     workInProgress.updateQueue = null;
 
+    workInProgress.dependencies = null;
+
     workInProgress.stateNode = null;
   } else {
     workInProgress.childLanes = current.childLanes;
@@ -178,6 +201,15 @@ export function resetWorkInProgress(
     workInProgress.updateQueue = current.updateQueue;
 
     workInProgress.type = current.type;
+
+    const currentDependencies = current.dependencies;
+    workInProgress.dependencies =
+      currentDependencies === null
+        ? null
+        : {
+            lanes: currentDependencies.lanes,
+            firstContext: currentDependencies.firstContext,
+          };
   }
   return workInProgress;
 }
@@ -217,6 +249,7 @@ class FiberNode implements Fiber {
   updateQueue = null;
 
   memoizedState = null;
+  dependencies: Dependencies | null = null;
 
   flags = NoFlags;
   subtreeFlags = NoFlags;

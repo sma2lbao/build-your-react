@@ -1,5 +1,6 @@
 import { Dispatcher } from "react-reconciler/react-internal-types";
 import ReactSharedInternals from "./react-shared-internals-client";
+import { ReactContext } from "shared/react-types";
 
 type Dispatch<A> = (action: A) => void;
 type BasicStateAction<S> = S | ((state: S) => S);
@@ -61,6 +62,12 @@ export function useReducer<S, I, A>(
 ): [S, Dispatch<A>] {
   const dispatcher = resolveDispatcher();
   return dispatcher.useReducer(reducer, initialArg, init);
+}
+
+export function useContext<T>(Context: ReactContext<T>): T {
+  const dispatcher = resolveDispatcher();
+
+  return dispatcher.useContext(Context);
 }
 
 function resolveDispatcher() {

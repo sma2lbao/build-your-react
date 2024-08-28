@@ -8,6 +8,8 @@ import { Lanes, NoLanes, includesSomeLane } from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
+  ContextConsumer,
+  ContextProvider,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -21,6 +23,7 @@ import {
   processUpdateQueue,
 } from "./react-fiber-class-update-queue";
 import {
+  bailoutHooks,
   renderWithHooks,
   replaySuspendedComponentWithHooks,
 } from "./react-fiber-hooks";
@@ -32,6 +35,13 @@ import {
 } from "./react-fiber";
 import shallowEqual from "shared/shallow-equal";
 import { markSkippedUpdateLanes } from "./react-fiber-work-loop";
+import {
+  prepareToReadContext,
+  propagateContextChange,
+  pushProvider,
+  readContext,
+} from "./react-fiber-new-context";
+import { ReactConsumerType, ReactContext } from "shared/react-types";
 
 let didReceiveUpdate: boolean = false;
 
@@ -54,6 +64,18 @@ export function beginWork(
     if (oldProps !== newProps) {
       didReceiveUpdate = true;
     } else {
+      const hasScheduledUpdateOrContext = checkScheduledUpdateOrContext(
+        current,
+        renderLanes
+      );
+
+      if (!hasScheduledUpdateOrContext) {
+        // 优化路径-防止重复渲染
+        didReceiveUpdate = false;
+        // TODO
+        // return attemptEarlyBailoutIfNoScheduledUpdate
+      }
+
       didReceiveUpdate = false;
     }
   } else {
@@ -102,6 +124,10 @@ export function beginWork(
       return updateHostComponent(current, workInProgress, renderLanes);
     case HostText:
       return updateHostText(current, workInProgress);
+    case ContextProvider:
+      return updateContextProvider(current, workInProgress, renderLanes);
+    case ContextConsumer:
+      return updateContextConsumer(current, workInProgress, renderLanes);
   }
 
   throw new Error(
@@ -161,6 +187,10 @@ function updateHostRoot(
   const root: FiberRoot = workInProgress.stateNode;
   const nextChildren = nextState.element;
 
+  if (nextChildren === prevChildren) {
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+  }
+
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
 }
@@ -172,6 +202,7 @@ function updateFunctionComponent(
   nextProps: any,
   renderLanes: Lanes
 ) {
+  prepareToReadContext(workInProgress, renderLanes);
   const nextChildren = renderWithHooks(
     current,
     workInProgress,
@@ -182,7 +213,9 @@ function updateFunctionComponent(
   );
 
   if (current !== null && !didReceiveUpdate) {
-    // TODO 优化路径
+    // 优化路径
+    bailoutHooks(current, workInProgress, renderLanes);
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
   }
 
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
@@ -285,6 +318,7 @@ function updateSimpleMemoComponent(
 ): Fiber | null {
   if (current !== null) {
     const prevProps = current.memoizedProps;
+    // 优化路径-减少重新渲染
     if (
       shallowEqual(prevProps, nextProps) &&
       current.ref === worInProgress.ref
@@ -311,6 +345,57 @@ function updateSimpleMemoComponent(
     nextProps,
     renderLanes
   );
+}
+
+function updateContextProvider(
+  current: Fiber | null,
+  worInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  const context = worInProgress.type;
+
+  const newProps = worInProgress.pendingProps;
+  const oldProps = worInProgress.memoizedProps;
+
+  const newValue = newProps.value;
+
+  pushProvider(worInProgress, context, newValue);
+  if (oldProps !== null) {
+    const oldValue = oldProps.value;
+    if (Object.is(oldValue, newValue)) {
+      if (oldProps.children === newProps.children) {
+        return bailoutOnAlreadyFinishedWork(
+          current,
+          worInProgress,
+          renderLanes
+        );
+      }
+    } else {
+      propagateContextChange(worInProgress, context, renderLanes);
+    }
+  }
+
+  const newChildren = newProps.children;
+  reconcileChildren(current, worInProgress, newChildren, renderLanes);
+  return worInProgress.child;
+}
+
+function updateContextConsumer(
+  current: Fiber | null,
+  worInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  const consumerType: ReactConsumerType<any> = worInProgress.type;
+  const context: ReactContext<any> = consumerType._context;
+  const newProps = worInProgress.pendingProps;
+  const render = newProps.children;
+
+  prepareToReadContext(worInProgress, renderLanes);
+  const newValue = readContext(context);
+  let newChildren = render(newValue);
+
+  reconcileChildren(current, worInProgress, newChildren, renderLanes);
+  return worInProgress.child;
 }
 
 /**
@@ -379,7 +464,7 @@ function checkScheduledUpdateOrContext(
 }
 
 /**
- * 优化路径
+ * 优化路径-复用 context 的 dependencies；复制子fiber
  * @param current
  * @param workInProgress
  * @param renderLanes
@@ -391,8 +476,9 @@ function bailoutOnAlreadyFinishedWork(
   renderLanes: Lanes
 ): Fiber | null {
   if (current !== null) {
-    // workInProgress.dependencies = current.dependencies;
+    workInProgress.dependencies = current.dependencies;
   }
+  debugger;
 
   markSkippedUpdateLanes(workInProgress.lanes);
 

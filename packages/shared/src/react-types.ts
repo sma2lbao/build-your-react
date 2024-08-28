@@ -46,3 +46,16 @@ export type Thenable<T> =
 export type RefObject = {
   current: any;
 };
+
+export type ReactContext<T> = {
+  $$typeof: symbol | number;
+  Provider: ReactContext<T>;
+  Consumer: ReactConsumerType<T>;
+  _currentValue: T;
+  _currentValue2: T;
+};
+
+export type ReactConsumerType<T> = {
+  $$typeof: symbol | number;
+  _context: ReactContext<T>;
+};

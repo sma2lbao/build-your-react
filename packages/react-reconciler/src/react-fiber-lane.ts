@@ -261,6 +261,16 @@ export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
 }
 
 /**
+ * set 去除 subset 优先级通道
+ * @param set
+ * @param subset
+ * @returns
+ */
+export function removeLanes(set: Lanes, subset: Lanes | Lane): Lanes {
+  return set & ~subset;
+}
+
+/**
  * 是否为子集
  * @param set
  * @param subset

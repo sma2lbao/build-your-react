@@ -8,7 +8,9 @@ import { ChildDeletion, Placement } from "./react-fiber-flags";
 import { Lanes } from "./react-fiber-lane";
 import { Fiber } from "./react-internal-types";
 import { HostText } from "./react-work-tags";
-import { REACT_ELEMENT_TYPE } from "shared/react-symbols";
+import { REACT_CONTEXT_TYPE, REACT_ELEMENT_TYPE } from "shared/react-symbols";
+import { ReactContext } from "shared/react-types";
+import { readContextDuringReconciliation } from "./react-fiber-new-context";
 
 type ChildReconciler = (
   returnFiber: Fiber,
@@ -77,6 +79,17 @@ function createChildReconciler(
         );
 
         return firstChild;
+      }
+
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
+        const context: ReactContext<any> = newChild;
+
+        return reconcileChildFibersImpl(
+          returnFiber,
+          currentFirstChild,
+          readContextDuringReconciliation(returnFiber, context, lanes),
+          lanes
+        );
       }
     }
     if (
@@ -400,6 +413,16 @@ function createChildReconciler(
         // TODO updateFragment
         throw new Error("TODO updateFragment");
       }
+
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
+        const context: ReactContext<any> = newChild;
+        return updateSlot(
+          returnFiber,
+          oldFiber,
+          readContextDuringReconciliation(returnFiber, context, lanes),
+          lanes
+        );
+      }
     }
 
     return null;
@@ -444,6 +467,18 @@ function createChildReconciler(
         // TODO 支持 Fragment
         throw new Error(`TODO 支持 Fragment`);
       }
+
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
+        const context: ReactContext<any> = newChild;
+
+        return updateFromMap(
+          existingChildren,
+          returnFiber,
+          newIdx,
+          readContextDuringReconciliation(returnFiber, context, lanes),
+          lanes
+        );
+      }
     }
 
     return null;
@@ -485,6 +520,16 @@ function createChildReconciler(
 
       if (Array.isArray(newChild)) {
         // TODO Fragment
+      }
+
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
+        const context: ReactContext<any> = newChild;
+
+        return createChild(
+          returnFiber,
+          readContextDuringReconciliation(returnFiber, context, lanes),
+          lanes
+        );
       }
     }
 
