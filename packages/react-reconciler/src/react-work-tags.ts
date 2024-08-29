@@ -7,6 +7,7 @@ export type WorkTag =
   | typeof HostRoot
   | typeof HostComponent
   | typeof HostText
+  | typeof Fragment
   | typeof ContextConsumer
   | typeof ContextProvider
   | typeof MemoComponent
@@ -36,6 +37,8 @@ export const HostComponent = 5;
  * 字符串
  */
 export const HostText = 6;
+
+export const Fragment = 7;
 
 export const ContextConsumer = 9;
 

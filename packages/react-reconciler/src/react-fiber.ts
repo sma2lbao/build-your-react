@@ -1,6 +1,7 @@
 import {
   REACT_CONSUMER_TYPE,
   REACT_CONTEXT_TYPE,
+  REACT_FRAGMENT_TYPE,
   REACT_MEMO_TYPE,
 } from "shared/react-symbols";
 import { NoFlags, Placement } from "./react-fiber-flags";
@@ -15,6 +16,7 @@ import {
 import {
   ContextConsumer,
   ContextProvider,
+  Fragment,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -23,6 +25,7 @@ import {
   WorkTag,
 } from "./react-work-tags";
 import { ReactElement } from "shared/react-element-type";
+import { ReactFragment } from "shared/react-types";
 
 export function createHostRootFiber(): Fiber {
   let mode = ConcurrentMode;
@@ -30,6 +33,17 @@ export function createHostRootFiber(): Fiber {
   mode |= StrictLegacyMode | StrictEffectsMode;
 
   return createFiber(HostRoot, null, null, mode);
+}
+
+export function createFiberFromFragment(
+  elements: ReactFragment,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: null | string
+): Fiber {
+  const fiber = createFiber(Fragment, elements, key, mode);
+  fiber.lanes = lanes;
+  return fiber;
 }
 
 export function createFiberFromText(
@@ -81,6 +95,8 @@ export function createFiberFromTypeAndProps(
     fiberTag = HostComponent;
   } else {
     getTag: switch (type) {
+      case REACT_FRAGMENT_TYPE:
+        return createFiberFromFragment(pendingProps.children, mode, lanes, key);
       default: {
         if (typeof type === "object" && type !== null) {
           switch (type.$$typeof) {

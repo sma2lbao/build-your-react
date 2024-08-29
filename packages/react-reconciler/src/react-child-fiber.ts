@@ -1,14 +1,20 @@
 import { ReactElement } from "shared/react-element-type";
 import {
   createFiberFromElement,
+  createFiberFromFragment,
   createFiberFromText,
   createWorkInProgress,
 } from "./react-fiber";
 import { ChildDeletion, Placement } from "./react-fiber-flags";
 import { Lanes } from "./react-fiber-lane";
 import { Fiber } from "./react-internal-types";
-import { HostText } from "./react-work-tags";
-import { REACT_CONTEXT_TYPE, REACT_ELEMENT_TYPE } from "shared/react-symbols";
+import { Fragment, HostText } from "./react-work-tags";
+import {
+  REACT_CONTEXT_TYPE,
+  REACT_ELEMENT_TYPE,
+  REACT_FRAGMENT_TYPE,
+  getIteratorFn,
+} from "shared/react-symbols";
 import { ReactContext } from "shared/react-types";
 import { readContextDuringReconciliation } from "./react-fiber-new-context";
 
@@ -55,6 +61,15 @@ function createChildReconciler(
     newChild: any,
     lanes: Lanes
   ): Fiber | null {
+    const isUnKeyedTopLevelFragment =
+      typeof newChild === "object" &&
+      newChild !== null &&
+      newChild.type === REACT_FRAGMENT_TYPE &&
+      newChild.key === null;
+    if (isUnKeyedTopLevelFragment) {
+      newChild = newChild.props.children;
+    }
+
     if (typeof newChild === "object" && newChild !== null) {
       switch (newChild.$$typeof) {
         case REACT_ELEMENT_TYPE: {
@@ -130,13 +145,22 @@ function createChildReconciler(
     while (child !== null) {
       if (child.key === key) {
         const elementType = element.type;
-        if (child.elementType === elementType) {
-          // 单节点删除其他兄弟节点
-          deleteRemainingChildren(returnFiber, child.sibling);
-          const existing = useFiber(child, element.props);
-          coerceRef(returnFiber, child, existing, element);
-          existing.return = returnFiber;
-          return existing;
+        if (elementType === REACT_FRAGMENT_TYPE) {
+          if (child.tag === Fragment) {
+            deleteRemainingChildren(returnFiber, child.sibling);
+            const existing = useFiber(child, element.props.children);
+            existing.return = returnFiber;
+            return existing;
+          }
+        } else {
+          if (child.elementType === elementType) {
+            // 单节点删除其他兄弟节点
+            deleteRemainingChildren(returnFiber, child.sibling);
+            const existing = useFiber(child, element.props);
+            coerceRef(returnFiber, child, existing, element);
+            existing.return = returnFiber;
+            return existing;
+          }
         }
 
         // 都没有匹配
@@ -149,10 +173,21 @@ function createChildReconciler(
       child = child.sibling;
     }
 
-    const created = createFiberFromElement(element, returnFiber.mode, lanes);
-    coerceRef(returnFiber, currentFirstChild, created, element);
-    created.return = returnFiber;
-    return created;
+    if (element.type === REACT_FRAGMENT_TYPE) {
+      const created = createFiberFromFragment(
+        element.props.children,
+        returnFiber.mode,
+        lanes,
+        element.key
+      );
+      created.return = returnFiber;
+      return created;
+    } else {
+      const created = createFiberFromElement(element, returnFiber.mode, lanes);
+      coerceRef(returnFiber, currentFirstChild, created, element);
+      created.return = returnFiber;
+      return created;
+    }
   }
 
   function reconcileSingleTextNode(
@@ -405,13 +440,20 @@ function createChildReconciler(
         }
       }
 
-      if (Array.isArray(newChild)) {
+      if (Array.isArray(newChild) || getIteratorFn(newChild)) {
         if (key !== null) {
           return null;
         }
 
-        // TODO updateFragment
-        throw new Error("TODO updateFragment");
+        const updated = updateFragment(
+          returnFiber,
+          oldFiber,
+          newChild,
+          lanes,
+          null
+        );
+
+        return updated;
       }
 
       if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
@@ -463,9 +505,16 @@ function createChildReconciler(
         }
       }
 
-      if (Array.isArray(newChild)) {
-        // TODO 支持 Fragment
-        throw new Error(`TODO 支持 Fragment`);
+      if (Array.isArray(newChild) || getIteratorFn(newChild)) {
+        const matchedFiber = existingChildren.get(newIdx) || null;
+        const updated = updateFragment(
+          returnFiber,
+          matchedFiber,
+          newChild,
+          lanes,
+          null
+        );
+        return updated;
       }
 
       if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
@@ -518,8 +567,15 @@ function createChildReconciler(
         }
       }
 
-      if (Array.isArray(newChild)) {
-        // TODO Fragment
+      if (Array.isArray(newChild) || getIteratorFn(newChild)) {
+        const created = createFiberFromFragment(
+          newChild,
+          returnFiber.mode,
+          lanes,
+          null
+        );
+        created.return = returnFiber;
+        return created;
       }
 
       if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
@@ -588,7 +644,16 @@ function createChildReconciler(
     lanes: Lanes
   ): Fiber {
     const elementType = element.type;
-    // TODO updateFragment
+    if (elementType === REACT_FRAGMENT_TYPE) {
+      const updated = updateFragment(
+        returnFiber,
+        current,
+        element.props.children,
+        lanes,
+        element.key
+      );
+      return updated;
+    }
 
     // 更新
     if (current !== null) {
@@ -605,6 +670,29 @@ function createChildReconciler(
     coerceRef(returnFiber, current, created, element);
     created.return = returnFiber;
     return created;
+  }
+
+  function updateFragment(
+    returnFiber: Fiber,
+    current: Fiber | null,
+    fragment: Iterable<React$Node>,
+    lanes: Lanes,
+    key: null | string
+  ): Fiber {
+    if (current === null || current.tag !== Fragment) {
+      const created = createFiberFromFragment(
+        fragment,
+        returnFiber.mode,
+        lanes,
+        key
+      );
+      created.return = returnFiber;
+      return created;
+    } else {
+      const existing = useFiber(current, fragment);
+      existing.return = returnFiber;
+      return existing;
+    }
   }
 
   return reconcileChildFibers;

@@ -13,6 +13,7 @@ import { Fiber, FiberRoot } from "./react-internal-types";
 import {
   ContextConsumer,
   ContextProvider,
+  Fragment,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -50,6 +51,7 @@ export function completeWork(
       bubbleProperties(workInProgress);
       return null;
     }
+    case Fragment:
     case ContextConsumer:
     case MemoComponent:
     case SimpleMemoComponent:

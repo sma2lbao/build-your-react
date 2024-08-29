@@ -10,6 +10,7 @@ import { Fiber, FiberRoot } from "./react-internal-types";
 import {
   ContextConsumer,
   ContextProvider,
+  Fragment,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -126,6 +127,8 @@ export function beginWork(
         renderLanes
       );
     }
+    case Fragment:
+      return updateFragment(current, workInProgress, renderLanes);
     case HostComponent:
       return updateHostComponent(current, workInProgress, renderLanes);
     case HostText:
@@ -401,6 +404,16 @@ function updateContextConsumer(
   let newChildren = render(newValue);
 
   reconcileChildren(current, worInProgress, newChildren, renderLanes);
+  return worInProgress.child;
+}
+
+function updateFragment(
+  current: Fiber | null,
+  worInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  const nextChildren = worInProgress.pendingProps;
+  reconcileChildren(current, worInProgress, nextChildren, renderLanes);
   return worInProgress.child;
 }
 

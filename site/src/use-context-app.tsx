@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createContext, useContext, useMemo, useState } from "react";
+import { Fragment, createContext, useContext, useMemo, useState } from "react";
 
 interface ContextProps {
   user: any;
@@ -22,11 +22,13 @@ export default function MyApp() {
 
   return (
     <ThemeContext.Provider value={contextValue}>
-      <Form />
-      <label>
-        <span>当前：{theme}</span>
-        <button onClick={handleToggle}>切换</button>
-      </label>
+      <Fragment>
+        <Form />
+        <label>
+          <span>当前：{theme}</span>
+          <button onClick={handleToggle}>切换</button>
+        </label>
+      </Fragment>
     </ThemeContext.Provider>
   );
 }

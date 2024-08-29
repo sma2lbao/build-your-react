@@ -1,3 +1,5 @@
+import { REACT_FRAGMENT_TYPE } from "shared/react-symbols";
+
 import { createElement } from "./jsx/react-jsx-element";
 import { memo } from "./react-memo";
 import { createContext } from "./react-context";
@@ -29,5 +31,6 @@ export {
   useDeferredValue,
   useId,
   useContext,
+  REACT_FRAGMENT_TYPE as Fragment,
   ReactSharedInternals as __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
 };
