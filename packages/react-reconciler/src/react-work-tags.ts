@@ -11,7 +11,8 @@ export type WorkTag =
   | typeof ContextConsumer
   | typeof ContextProvider
   | typeof MemoComponent
-  | typeof SimpleMemoComponent;
+  | typeof SimpleMemoComponent
+  | typeof OffscreenComponent;
 
 /**
  * 函数组件
@@ -53,3 +54,8 @@ export const MemoComponent = 14;
  * 可缓存浅比较函数组件
  */
 export const SimpleMemoComponent = 15;
+
+/**
+ * 离屏组件标识
+ */
+export const OffscreenComponent = 22;

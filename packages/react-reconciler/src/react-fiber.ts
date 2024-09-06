@@ -3,6 +3,7 @@ import {
   REACT_CONTEXT_TYPE,
   REACT_FRAGMENT_TYPE,
   REACT_MEMO_TYPE,
+  REACT_OFFSCREEN_TYPE,
 } from "shared/react-symbols";
 import { NoFlags, Placement } from "./react-fiber-flags";
 import { Lanes, NoLanes } from "./react-fiber-lane";
@@ -22,10 +23,20 @@ import {
   HostRoot,
   HostText,
   MemoComponent,
+  OffscreenComponent,
   WorkTag,
 } from "./react-work-tags";
 import { ReactElement } from "shared/react-element-type";
 import { ReactFragment } from "shared/react-types";
+import {
+  OffscreenInstance,
+  OffscreenProps,
+  OffscreenVisible,
+} from "./react-fiber-activity-component";
+import {
+  attachOffscreenInstance,
+  detachOffscreenInstance,
+} from "./react-fiber-commit-work";
 
 export function createHostRootFiber(): Fiber {
   let mode = ConcurrentMode;
@@ -43,6 +54,26 @@ export function createFiberFromFragment(
 ): Fiber {
   const fiber = createFiber(Fragment, elements, key, mode);
   fiber.lanes = lanes;
+  return fiber;
+}
+
+export function createFiberFromOffscreen(
+  pendingProps: OffscreenProps,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: string | null
+): Fiber {
+  const fiber = createFiber(OffscreenComponent, pendingProps, key, mode);
+  fiber.elementType = REACT_OFFSCREEN_TYPE;
+  fiber.lanes = lanes;
+  const primaryChildInstance: OffscreenInstance = {
+    _visibility: OffscreenVisible,
+    _pendingVisibility: OffscreenVisible,
+    _current: null,
+    detach: () => detachOffscreenInstance(primaryChildInstance),
+    attach: () => attachOffscreenInstance(primaryChildInstance),
+  };
+  fiber.stateNode = primaryChildInstance;
   return fiber;
 }
 
@@ -97,6 +128,8 @@ export function createFiberFromTypeAndProps(
     getTag: switch (type) {
       case REACT_FRAGMENT_TYPE:
         return createFiberFromFragment(pendingProps.children, mode, lanes, key);
+      case REACT_OFFSCREEN_TYPE:
+        return createFiberFromOffscreen(pendingProps, mode, lanes, key);
       default: {
         if (typeof type === "object" && type !== null) {
           switch (type.$$typeof) {

@@ -59,3 +59,9 @@ export type ReactConsumerType<T> = {
   $$typeof: symbol | number;
   _context: ReactContext<T>;
 };
+
+export type OffscreenMode =
+  | "hidden"
+  | "unstable-defer-without-hiding"
+  | "visible"
+  | "manual";

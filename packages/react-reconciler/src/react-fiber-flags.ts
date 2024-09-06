@@ -11,6 +11,11 @@ export const NoFlags = 0b0000000000000000000000000000;
 export const Placement = 0b0000000000000000000000000010;
 
 /**
+ * 捕获错误标记
+ */
+export const DidCapture = 0b0000000000000000000010000000;
+
+/**
  * Fiber删除子元素标记
  */
 export const ChildDeletion = 0b0000000000000000000000010000;
@@ -34,6 +39,11 @@ export const Ref = 0b0000000000000000001000000000;
  * Fiber副作用标记
  */
 export const Passive = 0b0000000000000000100000000000;
+
+/**
+ * 离屏组件可见的标记
+ */
+export const Visibility = 0b0000000000000010000000000000;
 
 export const HostEffectMask = 0b0000000000000111111111111111;
 

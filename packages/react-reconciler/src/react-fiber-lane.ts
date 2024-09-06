@@ -48,6 +48,11 @@ const TransitionLane15: Lane = /*                       */ 0b0000000001000000000
  */
 export const IdleLane: Lane = 0b0010000000000000000000000000000;
 
+/**
+ * 离屏处理优先级管道
+ */
+export const OffscreenLane: Lane = 0b0100000000000000000000000000000;
+
 let nextTransitionLane: Lane = TransitionLane1;
 
 export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
@@ -310,5 +315,9 @@ export function claimNextTransitionLane(): Lane {
     nextTransitionLane = TransitionLane1;
   }
 
+  return lane;
+}
+
+export function laneToLanes(lane: Lane): Lanes {
   return lane;
 }

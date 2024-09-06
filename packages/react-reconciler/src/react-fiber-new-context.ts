@@ -133,21 +133,21 @@ export function popProvider(
 }
 
 export function propagateContextChange<T>(
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   context: ReactContext<T>,
   renderLanes: Lanes
 ): void {
-  propagateContextChange_eager(worInProgress, context, renderLanes);
+  propagateContextChange_eager(workInProgress, context, renderLanes);
 }
 
 function propagateContextChange_eager<T>(
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   context: ReactContext<T>,
   renderLanes: Lanes
 ): void {
-  let fiber = worInProgress.child;
+  let fiber = workInProgress.child;
   if (fiber !== null) {
-    fiber.return = worInProgress;
+    fiber.return = workInProgress;
   }
   while (fiber !== null) {
     let nextFiber;
@@ -167,7 +167,7 @@ function propagateContextChange_eager<T>(
           scheduleContextWorkOnParentPath(
             fiber.return,
             renderLanes,
-            worInProgress
+            workInProgress
           );
 
           list.lanes = mergeLanes(list.lanes, renderLanes);
@@ -177,7 +177,7 @@ function propagateContextChange_eager<T>(
         dependency = dependency.next;
       }
     } else if (fiber.tag === ContextProvider) {
-      nextFiber = fiber.type === worInProgress.type ? null : fiber.child;
+      nextFiber = fiber.type === workInProgress.type ? null : fiber.child;
     } else {
       nextFiber = fiber.child;
     }
@@ -187,7 +187,7 @@ function propagateContextChange_eager<T>(
     } else {
       nextFiber = fiber;
       while (nextFiber !== null) {
-        if (nextFiber === worInProgress) {
+        if (nextFiber === workInProgress) {
           nextFiber = null;
           break;
         }

@@ -71,3 +71,7 @@
 2024/08/29
 
 - 支持 Fragment 组件
+
+2024/09/05
+
+- 支持 unstable_Activity（Offscreen） 组件

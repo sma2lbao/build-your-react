@@ -740,3 +740,21 @@ export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
 export function batchedUpdates<A, R>(fn: (a: A) => R, a: A): R {
   return fn(a);
 }
+
+/**
+ * 设置相关连优先级通道
+ * 两个或多个渲染任务（车道）被互相绑定，必须同时完成或处理
+ * @param newEntangledRenderLanes
+ */
+export function setEntangledRenderLanes(newEntangledRenderLanes: Lanes) {
+  entangledRenderLanes = newEntangledRenderLanes;
+}
+
+/**
+ * 相关连优先级通道
+ * 两个或多个渲染任务（车道）被互相绑定，必须同时完成或处理
+ * @returns
+ */
+export function getEntangledRenderLanes(): Lanes {
+  return entangledRenderLanes;
+}

@@ -4,7 +4,14 @@ import {
   mountChildFibers,
   reconcileChildFibers,
 } from "./react-child-fiber";
-import { Lanes, NoLanes, includesSomeLane } from "./react-fiber-lane";
+import {
+  Lanes,
+  NoLanes,
+  OffscreenLane,
+  includesSomeLane,
+  laneToLanes,
+  mergeLanes,
+} from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
@@ -16,6 +23,7 @@ import {
   HostRoot,
   HostText,
   MemoComponent,
+  OffscreenComponent,
   SimpleMemoComponent,
 } from "./react-work-tags";
 import { pushHostContainer } from "./react-fiber-host-context";
@@ -43,6 +51,15 @@ import {
   readContext,
 } from "./react-fiber-new-context";
 import { ReactConsumerType, ReactContext } from "shared/react-types";
+import {
+  OffscreenDetached,
+  OffscreenProps,
+  OffscreenState,
+} from "./react-fiber-activity-component";
+import {
+  pushHiddenContext,
+  reuseHiddenContextOnStack,
+} from "./react-fiber-hidden-context";
 
 let didReceiveUpdate: boolean = false;
 
@@ -137,6 +154,9 @@ export function beginWork(
       return updateContextProvider(current, workInProgress, renderLanes);
     case ContextConsumer:
       return updateContextConsumer(current, workInProgress, renderLanes);
+    case OffscreenComponent: {
+      return updateOffscreenComponent(current, workInProgress, renderLanes);
+    }
   }
 
   throw new Error(
@@ -320,7 +340,7 @@ function updateMemoComponent(
 
 function updateSimpleMemoComponent(
   current: Fiber | null,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   Component: any,
   nextProps: any,
   renderLanes: Lanes
@@ -330,17 +350,17 @@ function updateSimpleMemoComponent(
     // 优化路径-减少重新渲染
     if (
       shallowEqual(prevProps, nextProps) &&
-      current.ref === worInProgress.ref
+      current.ref === workInProgress.ref
     ) {
       didReceiveUpdate = false;
 
-      worInProgress.pendingProps = nextProps = prevProps;
+      workInProgress.pendingProps = nextProps = prevProps;
 
       if (!checkScheduledUpdateOrContext(current, renderLanes)) {
-        worInProgress.lanes = current.lanes;
+        workInProgress.lanes = current.lanes;
         return bailoutOnAlreadyFinishedWork(
           current,
-          worInProgress,
+          workInProgress,
           renderLanes
         );
       }
@@ -349,7 +369,7 @@ function updateSimpleMemoComponent(
 
   return updateFunctionComponent(
     current,
-    worInProgress,
+    workInProgress,
     Component,
     nextProps,
     renderLanes
@@ -358,63 +378,144 @@ function updateSimpleMemoComponent(
 
 function updateContextProvider(
   current: Fiber | null,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   renderLanes: Lanes
 ) {
-  const context = worInProgress.type;
+  const context = workInProgress.type;
 
-  const newProps = worInProgress.pendingProps;
-  const oldProps = worInProgress.memoizedProps;
+  const newProps = workInProgress.pendingProps;
+  const oldProps = workInProgress.memoizedProps;
 
   const newValue = newProps.value;
 
-  pushProvider(worInProgress, context, newValue);
+  pushProvider(workInProgress, context, newValue);
   if (oldProps !== null) {
     const oldValue = oldProps.value;
     if (Object.is(oldValue, newValue)) {
       if (oldProps.children === newProps.children) {
         return bailoutOnAlreadyFinishedWork(
           current,
-          worInProgress,
+          workInProgress,
           renderLanes
         );
       }
     } else {
-      propagateContextChange(worInProgress, context, renderLanes);
+      propagateContextChange(workInProgress, context, renderLanes);
     }
   }
 
   const newChildren = newProps.children;
-  reconcileChildren(current, worInProgress, newChildren, renderLanes);
-  return worInProgress.child;
+  reconcileChildren(current, workInProgress, newChildren, renderLanes);
+  return workInProgress.child;
 }
 
 function updateContextConsumer(
   current: Fiber | null,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   renderLanes: Lanes
 ) {
-  const consumerType: ReactConsumerType<any> = worInProgress.type;
+  const consumerType: ReactConsumerType<any> = workInProgress.type;
   const context: ReactContext<any> = consumerType._context;
-  const newProps = worInProgress.pendingProps;
+  const newProps = workInProgress.pendingProps;
   const render = newProps.children;
 
-  prepareToReadContext(worInProgress, renderLanes);
+  prepareToReadContext(workInProgress, renderLanes);
   const newValue = readContext(context);
   let newChildren = render(newValue);
 
-  reconcileChildren(current, worInProgress, newChildren, renderLanes);
-  return worInProgress.child;
+  reconcileChildren(current, workInProgress, newChildren, renderLanes);
+  return workInProgress.child;
 }
 
 function updateFragment(
   current: Fiber | null,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   renderLanes: Lanes
 ) {
-  const nextChildren = worInProgress.pendingProps;
-  reconcileChildren(current, worInProgress, nextChildren, renderLanes);
-  return worInProgress.child;
+  const nextChildren = workInProgress.pendingProps;
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
+}
+
+function updateOffscreenComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  debugger;
+  const nextProps: OffscreenProps = workInProgress.pendingProps;
+  const nextChildren = nextProps.children;
+  const nextIsDetached =
+    (workInProgress.stateNode._pendingVisibility & OffscreenDetached) !== 0;
+  const prevState: OffscreenState | null =
+    current !== null ? current.memoizedState : null;
+
+  markRef(current, workInProgress);
+
+  if (nextProps.mode === "hidden" || nextIsDetached) {
+    // 渲染隐藏树
+    if (!includesSomeLane(renderLanes, OffscreenLane)) {
+      // TODO 挂起
+      workInProgress.lanes = workInProgress.childLanes =
+        laneToLanes(OffscreenLane);
+
+      const nextBaseLanes =
+        prevState !== null
+          ? mergeLanes(prevState.baseLanes, renderLanes)
+          : renderLanes;
+
+      return deferHiddenOffscreenComponent(
+        current,
+        workInProgress,
+        nextBaseLanes,
+        renderLanes
+      );
+    } else {
+      const nextState: OffscreenState = {
+        baseLanes: NoLanes,
+        cachePool: null,
+      };
+      workInProgress.memoizedState = nextState;
+
+      if (prevState !== null) {
+        pushHiddenContext(workInProgress, prevState);
+      } else {
+        reuseHiddenContextOnStack(workInProgress);
+      }
+    }
+  } else {
+    // 渲染可见树
+    if (prevState !== null) {
+      // 从 hidden -> visible
+
+      pushHiddenContext(workInProgress, prevState);
+      reuseHiddenContextOnStack(workInProgress);
+
+      workInProgress.memoizedState = null;
+    } else {
+      // 一直是可见，没有变化
+      reuseHiddenContextOnStack(workInProgress);
+    }
+  }
+
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
+}
+
+function deferHiddenOffscreenComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  nextBaseLanes: Lanes,
+  renderLanes: Lanes
+) {
+  const nextState: OffscreenState = {
+    baseLanes: nextBaseLanes,
+    cachePool: null,
+  };
+  workInProgress.memoizedState = nextState;
+
+  reuseHiddenContextOnStack(workInProgress);
+  return null;
 }
 
 /**
@@ -505,7 +606,6 @@ function bailoutOnAlreadyFinishedWork(
   if (current !== null) {
     workInProgress.dependencies = current.dependencies;
   }
-  debugger;
 
   markSkippedUpdateLanes(workInProgress.lanes);
 
@@ -519,15 +619,19 @@ function bailoutOnAlreadyFinishedWork(
 
 function attemptEarlyBailoutIfNoScheduledUpdate(
   current: Fiber,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   renderLanes: Lanes
 ) {
-  switch (worInProgress.tag) {
+  switch (workInProgress.tag) {
     case HostRoot:
-      pushHostRootContext(worInProgress);
+      pushHostRootContext(workInProgress);
       // TODO
       break;
+    case OffscreenComponent: {
+      workInProgress.lanes = NoLanes;
+      return updateOffscreenComponent(current, workInProgress, renderLanes);
+    }
   }
 
-  return bailoutOnAlreadyFinishedWork(current, worInProgress, renderLanes);
+  return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
 }

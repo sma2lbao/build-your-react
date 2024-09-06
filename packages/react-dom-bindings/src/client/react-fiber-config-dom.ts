@@ -210,3 +210,26 @@ export function removeChildFromContainer(
     container.removeChild(child);
   }
 }
+
+export function hideInstance(instance: Instance): void {
+  const style = (instance as HTMLElement).style;
+  if (typeof style.setProperty === "function") {
+    style.setProperty("display", "none", "important");
+  } else {
+    style.display = "none";
+  }
+}
+
+export function unhideInstance(instance: Instance, props: Props): void {
+  const styleProp = props["style"];
+  const display =
+    styleProp !== undefined &&
+    styleProp !== null &&
+    styleProp.hasOwnProperty("display")
+      ? styleProp.display
+      : null;
+  (instance as HTMLElement).style.display =
+    display === null || typeof display === "boolean"
+      ? ""
+      : ("" + display).trim();
+}

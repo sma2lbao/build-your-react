@@ -189,7 +189,6 @@ export function renderWithHooks<Props, SecondArg>(
   secondArg: SecondArg,
   nextRenderLanes: Lanes
 ): any {
-  debugger;
   renderLanes = nextRenderLanes;
   currentlyRenderingFiber = workInProgress;
 
@@ -1040,15 +1039,15 @@ function areHookInputsEqual(
 /**
  * 优化路径-复用updateQueue，去除 PassiveEffect 及 UpdateEffect 以及 lanes
  * @param current
- * @param worInProgress
+ * @param workInProgress
  * @param lanes
  */
 export function bailoutHooks(
   current: Fiber,
-  worInProgress: Fiber,
+  workInProgress: Fiber,
   lanes: Lanes
 ): void {
-  worInProgress.updateQueue = current.updateQueue;
-  worInProgress.flags &= ~(PassiveEffect | UpdateEffect);
+  workInProgress.updateQueue = current.updateQueue;
+  workInProgress.flags &= ~(PassiveEffect | UpdateEffect);
   current.lanes = removeLanes(current.lanes, lanes);
 }

@@ -712,28 +712,28 @@ function coerceRef(
 
 export function cloneChildFibers(
   current: Fiber | null,
-  worInProgress: Fiber
+  workInProgress: Fiber
 ): void {
-  if (current !== null && worInProgress.child !== current.child) {
+  if (current !== null && workInProgress.child !== current.child) {
     throw new Error("Resuming work not yet implemented.");
   }
 
-  if (worInProgress.child === null) {
+  if (workInProgress.child === null) {
     return;
   }
 
-  let currentChild = worInProgress.child;
+  let currentChild = workInProgress.child;
   let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
-  worInProgress.child = newChild;
+  workInProgress.child = newChild;
 
-  newChild.return = worInProgress;
+  newChild.return = workInProgress;
   while (currentChild.sibling !== null) {
     currentChild = currentChild.sibling;
     newChild = newChild.sibling = createWorkInProgress(
       currentChild,
       currentChild.pendingProps
     );
-    newChild.return = worInProgress;
+    newChild.return = workInProgress;
   }
   newChild.sibling = null;
 }

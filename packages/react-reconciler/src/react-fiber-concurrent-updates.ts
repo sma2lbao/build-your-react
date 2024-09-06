@@ -167,3 +167,11 @@ function markUpdateLaneFromFiberToRoot(
 export function getConcurrentlyUpdatedLanes(): Lanes {
   return concurrentlyUpdatedLanes;
 }
+
+export function enqueueConcurrentRenderForLane(
+  fiber: Fiber,
+  lane: Lane
+): FiberRoot | null {
+  enqueueUpdate(fiber, null, null, lane);
+  return getRootForUpdatedFiber(fiber);
+}

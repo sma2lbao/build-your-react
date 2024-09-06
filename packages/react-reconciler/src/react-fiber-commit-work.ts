@@ -8,12 +8,14 @@ import {
   commitUpdate,
   detachDeletedInstance,
   getPublicInstance,
+  hideInstance,
   insertBefore,
   insertInContainerBefore,
   removeChild,
   removeChildFromContainer,
   resetTextContent,
   supportsMutation,
+  unhideInstance,
 } from "react-fiber-config";
 import {
   BeforeMutationMask,
@@ -27,8 +29,9 @@ import {
   Placement,
   Ref,
   Update,
+  Visibility,
 } from "./react-fiber-flags";
-import { Lanes } from "./react-fiber-lane";
+import { Lanes, SyncLane } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
   FunctionComponent,
@@ -36,6 +39,7 @@ import {
   HostRoot,
   HostText,
   MemoComponent,
+  OffscreenComponent,
   SimpleMemoComponent,
 } from "./react-work-tags";
 import {
@@ -47,6 +51,17 @@ import {
   Insertion as HookInsertion,
 } from "./react-hook-effect-tags";
 import { FunctionComponentUpdateQueue } from "./react-fiber-hooks";
+import {
+  OffscreenDetached,
+  OffscreenInstance,
+  OffscreenPassiveEffectsConnected,
+  OffscreenProps,
+  OffscreenState,
+  OffscreenVisible,
+  isOffscreenManual,
+} from "./react-fiber-activity-component";
+import { scheduleUpdateOnFiber } from "./react-fiber-work-loop";
+import { enqueueConcurrentRenderForLane } from "./react-fiber-concurrent-updates";
 
 /**
  * 下一个有副作用的Fiber
@@ -61,6 +76,9 @@ let hostParent: Instance | Container | null = null;
  * 用来标识是否是 react container节点 。（id=root的节点）
  */
 let hostParentIsContainer: boolean = false;
+
+let offscreenSubtreeIsHidden = false;
+let offscreenSubtreeWasHidden = false;
 
 /**
  * commit 阶段 mutation 阶段入口
@@ -210,6 +228,65 @@ function commitMutationEffectsOnFiber(
 
       return;
     }
+    case OffscreenComponent: {
+      if (flags & Ref) {
+        if (current !== null) {
+          safelyDetachRef(current);
+        }
+      }
+
+      const newState: OffscreenState | null = finishedWork.memoizedState;
+      const isHidden = newState !== null;
+      const wasHidden = current !== null && current.memoizedState !== null;
+
+      const prevOffscreenSubtreeIsHidden = offscreenSubtreeIsHidden;
+      const prevOffscreenSubtreeWasHidden = offscreenSubtreeWasHidden;
+
+      offscreenSubtreeIsHidden = prevOffscreenSubtreeIsHidden || isHidden;
+      offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden || wasHidden;
+
+      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+      offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden;
+      offscreenSubtreeIsHidden = prevOffscreenSubtreeIsHidden;
+
+      commitReconciliationEffects(finishedWork);
+
+      const offscreenInstance: OffscreenInstance = finishedWork.stateNode;
+
+      offscreenInstance._current = finishedWork;
+      offscreenInstance._visibility &= ~OffscreenDetached;
+      offscreenInstance._visibility |=
+        offscreenInstance._pendingVisibility & OffscreenDetached;
+
+      if (flags & Visibility) {
+        if (isHidden) {
+          offscreenInstance._visibility &= ~OffscreenVisible;
+        } else {
+          offscreenInstance._visibility |= OffscreenVisible;
+        }
+
+        if (isHidden) {
+          const isUpdate = current !== null;
+          const wasHiddenByAncestorOffscreen =
+            offscreenSubtreeIsHidden || offscreenSubtreeWasHidden;
+          if (isUpdate && !wasHidden && !wasHiddenByAncestorOffscreen) {
+            // 重新隐藏
+            recursivelyTraverseDisappearLayoutEffects(finishedWork);
+          }
+        } else {
+        }
+        debugger;
+        if (supportsMutation && !isOffscreenManual(finishedWork)) {
+          hideOrUnhideAllChildren(finishedWork, isHidden);
+        }
+      }
+
+      if (flags & Update) {
+        // TODO
+      }
+
+      return;
+    }
     default: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
@@ -333,6 +410,49 @@ function commitLayoutEffectOnFiber(
 
       break;
     }
+    case OffscreenComponent: {
+      const isHidden = finishedWork.memoizedState !== null;
+      const newOffscreenSubtreeIsHidden = isHidden || offscreenSubtreeIsHidden;
+      if (newOffscreenSubtreeIsHidden) {
+        // 隐藏不用处理
+      } else {
+        // 可见状态
+        const wasHidden = current !== null && current.memoizedState !== null;
+        const newOffscreenSubtreeWasHidden =
+          wasHidden || offscreenSubtreeWasHidden;
+        const prevOffscreenSubtreeIsHidden = offscreenSubtreeIsHidden;
+        const prevOffscreenSubtreeWasHidden = offscreenSubtreeWasHidden;
+        offscreenSubtreeIsHidden = newOffscreenSubtreeIsHidden;
+        offscreenSubtreeWasHidden = newOffscreenSubtreeWasHidden;
+
+        if (offscreenSubtreeIsHidden && !prevOffscreenSubtreeWasHidden) {
+          // 这是重新出现的边界的根。当我们继续遍历布局效果时，我们还必须重新挂载在Offscreen子树隐藏时卸载的布局效果。这是普通commitlayouteeffects的超集。
+          const includeWorkInProgressEffects =
+            (finishedWork.subtreeFlags & LayoutMask) !== NoFlags;
+          // TODO
+          throw new Error("includeWorkInProgressEffects");
+        } else {
+          recursivelyTraverseLayoutEffects(
+            finishedRoot,
+            finishedWork,
+            committedLanes
+          );
+        }
+        offscreenSubtreeIsHidden = prevOffscreenSubtreeIsHidden;
+        offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden;
+      }
+
+      if (flags & Ref) {
+        const props: OffscreenProps = finishedWork.memoizedProps;
+        if (props.mode === "manual") {
+          safelyAttachRef(finishedWork);
+        } else {
+          safelyDetachRef(finishedWork);
+        }
+      }
+
+      break;
+    }
     default: {
       recursivelyTraverseLayoutEffects(
         finishedRoot,
@@ -393,6 +513,14 @@ function recursivelyTraverseMutationEffects(
       commitMutationEffectsOnFiber(child, root, lanes);
       child = child.sibling;
     }
+  }
+}
+
+function recursivelyTraverseDisappearLayoutEffects(parentFiber: Fiber) {
+  let child = parentFiber.child;
+  while (child !== null) {
+    disappearLayoutEffects(child);
+    child = child.sibling;
   }
 }
 
@@ -523,6 +651,25 @@ function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
       }
       break;
     }
+    case OffscreenComponent: {
+      const instance: OffscreenInstance = finishedWork.stateNode;
+      const nextState: OffscreenState | null = finishedWork.memoizedState;
+
+      const isHidden = nextState !== null;
+
+      if (
+        isHidden &&
+        instance._visibility & OffscreenPassiveEffectsConnected &&
+        finishedWork.return === null
+      ) {
+        instance._visibility &= ~OffscreenPassiveEffectsConnected;
+        recursivelyTraverseDisconnectPassiveEffects(finishedWork);
+      } else {
+        recursivelyTraversePassiveUnmountEffects(finishedWork);
+      }
+
+      break;
+    }
     default: {
       recursivelyTraversePassiveUnmountEffects(finishedWork);
       break;
@@ -596,6 +743,51 @@ function commitPassiveMountOnFiber(
       }
       break;
     }
+    case OffscreenComponent: {
+      const instance: OffscreenInstance = finishedWork.stateNode;
+      const nextState: OffscreenState | null = finishedWork.memoizedState;
+
+      const isHidden = nextState !== null;
+
+      if (!isHidden) {
+        if (instance._visibility & OffscreenPassiveEffectsConnected) {
+          recursivelyTraversePassiveMountEffects(
+            finishedRoot,
+            finishedWork,
+            committedLanes
+          );
+        } else {
+          // TODO Cache
+        }
+      } else {
+        if (instance._visibility & OffscreenPassiveEffectsConnected) {
+          recursivelyTraversePassiveMountEffects(
+            finishedRoot,
+            finishedWork,
+            committedLanes
+          );
+        } else {
+          instance._visibility |= OffscreenPassiveEffectsConnected;
+
+          const includeWorkInProgressEffects =
+            (finishedWork.subtreeFlags & PassiveMask) !== NoFlags;
+
+          recursivelyTraverseReconnectPassiveEffects(
+            finishedRoot,
+            finishedWork,
+            committedLanes,
+            includeWorkInProgressEffects
+          );
+        }
+      }
+
+      if (flags & Passive) {
+        const current = finishedWork.alternate;
+        commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+      }
+
+      break;
+    }
     default: {
       recursivelyTraversePassiveMountEffects(
         finishedRoot,
@@ -647,6 +839,10 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
       );
       break;
     }
+    case OffscreenComponent: {
+      // TODO cache
+      break;
+    }
   }
 }
 
@@ -693,6 +889,150 @@ function commitPassiveUnmountEffectsInsideOfDeletedTree_complete(
     }
 
     nextEffect = returnFiber;
+  }
+}
+
+function recursivelyTraverseReconnectPassiveEffects(
+  finishedRoot: FiberRoot,
+  parentFiber: Fiber,
+  committedLanes: Lanes,
+  includeWorkInProgressEffects: boolean
+) {
+  const childShouldIncludeWorkInProgressEffects =
+    includeWorkInProgressEffects &&
+    (parentFiber.subtreeFlags & PassiveMask) !== NoFlags;
+
+  let child = parentFiber.child;
+  while (child !== null) {
+    reconnectPassiveEffects(
+      finishedRoot,
+      child,
+      committedLanes,
+      childShouldIncludeWorkInProgressEffects
+    );
+    child = child.sibling;
+  }
+}
+
+function recursivelyTraverseDisconnectPassiveEffects(parentFiber: Fiber): void {
+  const deletions = parentFiber.deletions;
+
+  if ((parentFiber.flags & ChildDeletion) !== NoFlags) {
+    if (deletions !== null) {
+      for (let i = 0; i < deletions.length; i++) {
+        const childToDelete = deletions[i];
+        nextEffect = childToDelete;
+        commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
+          childToDelete,
+          parentFiber
+        );
+      }
+    }
+    detachAlternateSiblings(parentFiber);
+  }
+
+  let child = parentFiber.child;
+  while (child !== null) {
+    disconnectPassiveEffect(child);
+    child = child.sibling;
+  }
+}
+
+function commitOffscreenPassiveMountEffects(
+  current: Fiber | null,
+  finishedWork: Fiber,
+  instance: OffscreenInstance
+) {
+  // TODO cache
+}
+
+export function reconnectPassiveEffects(
+  finishedRoot: FiberRoot,
+  finishedWork: Fiber,
+  committedLanes: Lanes,
+  includeWorkInProgressEffects: boolean
+) {
+  const flags = finishedWork.flags;
+  switch (finishedWork.tag) {
+    case FunctionComponent:
+    case SimpleMemoComponent: {
+      recursivelyTraverseReconnectPassiveEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes,
+        includeWorkInProgressEffects
+      );
+      commitHookPassiveMountEffects(finishedWork, HookPassive);
+      break;
+    }
+    case OffscreenComponent: {
+      const instance: OffscreenInstance = finishedWork.stateNode;
+      const nextState: OffscreenState | null = finishedWork.memoizedState;
+
+      const isHidden = nextState !== null;
+
+      if (isHidden) {
+        if (instance._visibility & OffscreenPassiveEffectsConnected) {
+          recursivelyTraverseReconnectPassiveEffects(
+            finishedRoot,
+            finishedWork,
+            committedLanes,
+            includeWorkInProgressEffects
+          );
+        } else {
+          // TODO cache
+        }
+      } else {
+        instance._visibility |= OffscreenPassiveEffectsConnected;
+        recursivelyTraverseReconnectPassiveEffects(
+          finishedRoot,
+          finishedWork,
+          committedLanes,
+          includeWorkInProgressEffects
+        );
+      }
+
+      if (includeWorkInProgressEffects && flags & Passive) {
+        const current: Fiber | null = finishedWork.alternate;
+        commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+      }
+      break;
+    }
+    default:
+      recursivelyTraverseReconnectPassiveEffects(
+        finishedRoot,
+        finishedWork,
+        committedLanes,
+        includeWorkInProgressEffects
+      );
+      break;
+  }
+}
+
+export function disconnectPassiveEffect(finishedWork: Fiber): void {
+  switch (finishedWork.tag) {
+    case FunctionComponent:
+    case SimpleMemoComponent: {
+      commitHookPassiveUnmountEffects(
+        finishedWork,
+        finishedWork.return,
+        HookPassive
+      );
+      recursivelyTraverseDisconnectPassiveEffects(finishedWork);
+      break;
+    }
+    case OffscreenComponent: {
+      const instance: OffscreenInstance = finishedWork.stateNode;
+      if (instance._visibility & OffscreenPassiveEffectsConnected) {
+        instance._visibility &= ~OffscreenPassiveEffectsConnected;
+        recursivelyTraverseDisconnectPassiveEffects(finishedWork);
+      } else {
+      }
+      break;
+    }
+    default:
+      recursivelyTraverseDisconnectPassiveEffects(finishedWork);
+      break;
   }
 }
 
@@ -1020,6 +1360,21 @@ function commitDeletionEffectsOnFiber(
       );
       return;
     }
+    case OffscreenComponent: {
+      safelyDetachRef(deletedFiber);
+      const prevOffscreenSubtreeWasHidden = offscreenSubtreeWasHidden;
+      offscreenSubtreeWasHidden =
+        prevOffscreenSubtreeWasHidden || deletedFiber.memoizedState !== null;
+
+      recursivelyTraverseDeletionEffects(
+        finishedRoot,
+        nearestMountedAncestor,
+        deletedFiber
+      );
+
+      offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden;
+      break;
+    }
     default: {
       recursivelyTraverseDeletionEffects(
         finishedRoot,
@@ -1040,5 +1395,157 @@ function recursivelyTraverseDeletionEffects(
   while (child !== null) {
     commitDeletionEffectsOnFiber(finishedRoot, nearestMountedAncestor, child);
     child = child.sibling;
+  }
+}
+
+function hideOrUnhideAllChildren(finishedWork: Fiber, isHidden: boolean) {
+  let hostSubtreeRoot = null;
+  if (supportsMutation) {
+    let node: Fiber = finishedWork;
+    while (true) {
+      if (node.tag === HostComponent) {
+        if (hostSubtreeRoot === null) {
+          hostSubtreeRoot = node;
+          try {
+            const instance = node.stateNode;
+            if (isHidden) {
+              hideInstance(instance);
+            } else {
+              unhideInstance(node.stateNode, node.memoizedProps);
+            }
+          } catch (error) {
+            throw new Error(`captureCommitPhaseError`);
+          }
+        }
+      } else if (node.tag === HostText) {
+        if (hostSubtreeRoot === null) {
+          try {
+            const instance = node.stateNode;
+            if (isHidden) {
+              hideInstance(instance);
+            } else {
+              unhideInstance(instance, node.memoizedProps);
+            }
+          } catch (error) {
+            throw new Error(`captureCommitPhaseError`);
+          }
+        }
+      } else if (
+        node.tag === OffscreenComponent &&
+        node.memoizedState !== null &&
+        node !== finishedWork
+      ) {
+        // 需要隐藏的嵌套的Offscreen
+      } else if (node.child !== null) {
+        node.child.return = node;
+        node = node.child;
+        continue;
+      }
+
+      if (node === finishedWork) {
+        return;
+      }
+      while (node.sibling === null) {
+        if (node.return === null || node.return === finishedWork) {
+          return;
+        }
+
+        if (hostSubtreeRoot === node) {
+          hostSubtreeRoot = null;
+        }
+
+        node = node.return;
+      }
+
+      if (hostSubtreeRoot === node) {
+        hostSubtreeRoot = null;
+      }
+
+      node.sibling.return = node.return;
+      node = node.sibling;
+    }
+  }
+}
+
+/**
+ * 离屏组件失活
+ * @param instance
+ */
+export function detachOffscreenInstance(instance: OffscreenInstance): void {
+  const fiber = instance._current;
+
+  if (fiber === null) {
+    throw new Error(
+      "Calling Offscreen.detach before instance handle has been set."
+    );
+  }
+
+  if ((instance._pendingVisibility & OffscreenDetached) !== NoFlags) {
+    // 如果有 OffscreenDetached 标识，代表已经触发过该回调
+    return;
+  }
+  // 用 SyncLane 同步优先级调度更新
+  const root = enqueueConcurrentRenderForLane(fiber, SyncLane);
+  if (root !== null) {
+    instance._pendingVisibility |= OffscreenDetached;
+    scheduleUpdateOnFiber(root, fiber, SyncLane);
+  }
+}
+
+/**
+ * 离屏组件激活
+ * @param instance
+ */
+export function attachOffscreenInstance(instance: OffscreenInstance): void {
+  const fiber = instance._current;
+  if (fiber === null) {
+    throw new Error(
+      "Calling Offscreen.detach before instance handle has been set."
+    );
+  }
+
+  if ((instance._pendingVisibility & OffscreenDetached) === NoFlags) {
+    // 如果没有 OffscreenDetached 标识代表已经触发过该回调
+    return;
+  }
+
+  const root = enqueueConcurrentRenderForLane(fiber, SyncLane);
+  if (root !== null) {
+    instance._pendingVisibility &= ~OffscreenDetached;
+    scheduleUpdateOnFiber(root, fiber, SyncLane);
+  }
+}
+
+export function disappearLayoutEffects(finishedWork: Fiber) {
+  switch (finishedWork.tag) {
+    case FunctionComponent:
+    case MemoComponent:
+    case SimpleMemoComponent: {
+      commitHookEffectListUnmount(
+        HookLayout,
+        finishedWork,
+        finishedWork.return
+      );
+      recursivelyTraverseDisappearLayoutEffects(finishedWork);
+      break;
+    }
+    case HostComponent: {
+      safelyDetachRef(finishedWork);
+      recursivelyTraverseDisappearLayoutEffects(finishedWork);
+      break;
+    }
+    case OffscreenComponent: {
+      safelyDetachRef(finishedWork);
+
+      const isHidden = finishedWork.memoizedState !== null;
+      if (!isHidden) {
+      } else {
+        recursivelyTraverseDisappearLayoutEffects(finishedWork);
+      }
+      break;
+    }
+    default:
+      recursivelyTraverseDisappearLayoutEffects(finishedWork);
+      break;
   }
 }
