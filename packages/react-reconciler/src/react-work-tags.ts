@@ -12,6 +12,7 @@ export type WorkTag =
   | typeof ContextProvider
   | typeof MemoComponent
   | typeof SimpleMemoComponent
+  | typeof LazyComponent
   | typeof OffscreenComponent;
 
 /**
@@ -54,6 +55,11 @@ export const MemoComponent = 14;
  * 可缓存浅比较函数组件
  */
 export const SimpleMemoComponent = 15;
+
+/**
+ * React.lazy 组件
+ */
+export const LazyComponent = 16;
 
 /**
  * 离屏组件标识

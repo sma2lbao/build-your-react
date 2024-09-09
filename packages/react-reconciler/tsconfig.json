@@ -27,6 +27,9 @@
       ],
       "shared/*": [
         "../shared/src/*"
+      ],
+      "react/*": [
+        "../react/src/*"
       ]
     },
   },

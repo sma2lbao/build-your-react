@@ -4,7 +4,7 @@ import { Lane, Lanes } from "./react-fiber-lane";
 import { RootTag } from "./react-root-tags";
 import { WorkTag } from "./react-work-tags";
 import { TypeOfMode } from "./react-type-of-mode";
-import { ReactContext, RefObject } from "shared/react-types";
+import { ReactContext, RefObject, Wakeable } from "shared/react-types";
 
 export interface Fiber {
   /**
@@ -124,6 +124,11 @@ interface BaseFiberRootProperties {
    * 当前活跃的根fiber。这是树的可变节点。
    */
   current: Fiber;
+
+  /**
+   * 用来缓存异步组件的回调函数，如 React.lazy 引入的组件
+   */
+  pingCache: WeakMap<Wakeable, Set<any>> | null;
 
   /**
    * 已完成的正在进行的HostRoot工作，准备提交。

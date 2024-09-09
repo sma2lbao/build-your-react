@@ -5,6 +5,7 @@ import {
 
 import { createElement } from "./jsx/react-jsx-element";
 import { memo } from "./react-memo";
+import { lazy } from "./react-lazy";
 import { createContext } from "./react-context";
 import {
   useReducer,
@@ -22,6 +23,7 @@ import ReactSharedInternals from "./react-shared-internals-client";
 
 export {
   memo,
+  lazy,
   createContext,
   createElement,
   useReducer,

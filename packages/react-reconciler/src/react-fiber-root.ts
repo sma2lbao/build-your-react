@@ -54,6 +54,8 @@ class FiberRootNode implements Omit<FiberRoot, "current"> {
 
   current: Fiber | null = null;
 
+  pingCache = null;
+
   finishedWork = null;
 
   cancelPendingCommit = null;

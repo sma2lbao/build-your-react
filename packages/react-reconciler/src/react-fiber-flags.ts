@@ -11,7 +11,7 @@ export const NoFlags = 0b0000000000000000000000000000;
 export const Placement = 0b0000000000000000000000000010;
 
 /**
- * 捕获错误标记
+ * 捕获错误标记 (已经处理)
  */
 export const DidCapture = 0b0000000000000000000010000000;
 
@@ -47,7 +47,15 @@ export const Visibility = 0b0000000000000010000000000000;
 
 export const HostEffectMask = 0b0000000000000111111111111111;
 
+/**
+ * 没处理完成
+ */
 export const Incomplete = 0b0000000000001000000000000000;
+
+/**
+ * 应该处理 (如异步组件已解析)
+ */
+export const ShouldCapture = 0b0000000000010000000000000000;
 
 export const LayoutStatic = 0b0000010000000000000000000000;
 

@@ -171,6 +171,21 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useContext: readContext,
 };
 
+const ContextOnlyDispatcher: Dispatcher = {
+  readContext,
+
+  useState: throwInvalidHookError,
+  useDeferredValue: throwInvalidHookError,
+  useEffect: throwInvalidHookError,
+  useLayoutEffect: throwInvalidHookError,
+  useRef: throwInvalidHookError,
+  useMemo: throwInvalidHookError,
+  useCallback: throwInvalidHookError,
+  useId: throwInvalidHookError,
+  useReducer: throwInvalidHookError,
+  useContext: throwInvalidHookError,
+};
+
 /**
  * 执行 FunctionComponent，一般返回原生组件树
  * @param current
@@ -1050,4 +1065,20 @@ export function bailoutHooks(
   workInProgress.updateQueue = current.updateQueue;
   workInProgress.flags &= ~(PassiveEffect | UpdateEffect);
   current.lanes = removeLanes(current.lanes, lanes);
+}
+
+export function resetHooksAfterThrow(): void {
+  currentlyRenderingFiber = null;
+  ReactSharedInternals.H = ContextOnlyDispatcher;
+}
+
+function throwInvalidHookError(): any {
+  throw new Error(
+    "Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for" +
+      " one of the following reasons:\n" +
+      "1. You might have mismatching versions of React and the renderer (such as React DOM)\n" +
+      "2. You might be breaking the Rules of Hooks\n" +
+      "3. You might have more than one copy of React in the same app\n" +
+      "See https://react.dev/link/invalid-hook-call for tips about how to debug and fix this problem."
+  );
 }

@@ -1,5 +1,6 @@
 export {
   memo,
+  lazy,
   createContext,
   createElement,
   useReducer,

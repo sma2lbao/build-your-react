@@ -12,6 +12,8 @@ export const REACT_CONSUMER_TYPE = Symbol.for("react.consumer");
 
 export const REACT_OFFSCREEN_TYPE = Symbol.for("react.offscreen");
 
+export const REACT_LAZY_TYPE = Symbol.for("react.lazy");
+
 const MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
 const FAUX_ITERATOR_SYMBOL = "@@iterator";
 

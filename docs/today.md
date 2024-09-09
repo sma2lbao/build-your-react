@@ -75,3 +75,7 @@
 2024/09/05
 
 - 支持 unstable_Activity（Offscreen） 组件
+
+2024/09/09
+
+- 支持 React.lazy() API

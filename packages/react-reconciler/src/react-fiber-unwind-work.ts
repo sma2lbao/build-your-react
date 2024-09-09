@@ -1,7 +1,8 @@
+import { DidCapture, NoFlags, ShouldCapture } from "./react-fiber-flags";
 import { popHostContainer } from "./react-fiber-host-context";
 import { Lanes } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
-import { HostRoot } from "./react-work-tags";
+import { HostComponent, HostRoot } from "./react-work-tags";
 
 export function unwindWork(
   current: Fiber | null,
@@ -9,12 +10,19 @@ export function unwindWork(
   renderLanes: Lanes
 ): Fiber | null {
   switch (workInProgress.tag) {
-    case HostRoot:
+    case HostRoot: {
       const root: FiberRoot = workInProgress.stateNode;
       popHostContainer();
       const flags = workInProgress.flags;
-
+      if (
+        (flags & ShouldCapture) !== NoFlags &&
+        (flags & DidCapture) === NoFlags
+      ) {
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+        return workInProgress;
+      }
       return null;
+    }
     default:
       return null;
   }

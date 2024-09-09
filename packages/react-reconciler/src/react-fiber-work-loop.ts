@@ -1,3 +1,4 @@
+import { Wakeable } from "shared/react-types";
 import {
   DefaultEventPriority,
   DiscreteEventPriority,
@@ -28,7 +29,7 @@ import {
   NoFlags,
   PassiveMask,
 } from "./react-fiber-flags";
-import { resetHooksOnUnwind } from "./react-fiber-hooks";
+import { resetHooksAfterThrow, resetHooksOnUnwind } from "./react-fiber-hooks";
 import {
   Lane,
   Lanes,
@@ -39,10 +40,14 @@ import {
   getNextLanes,
   includesBlockingLane,
   includesExpiredLane,
+  includesNonIdleWork,
+  isSubsetOfLanes,
   markRootFinished,
+  markRootPinged,
   markRootSuspended,
   markRootUpdated,
   mergeLanes,
+  removeLanes,
 } from "./react-fiber-lane";
 import {
   RenderTaskFn,
@@ -50,6 +55,7 @@ import {
   getContinuationForRoot,
 } from "./react-fiber-root-scheduler";
 import { isThenableResolved } from "./react-fiber-thenable";
+import { throwException } from "./react-fiber-throw";
 import { unwindInterruptedWork, unwindWork } from "./react-fiber-unwind-work";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import { FunctionComponent, HostComponent } from "./react-work-tags";
@@ -64,6 +70,13 @@ import {
   getCurrentUpdatePriority,
 } from "react-fiber-config";
 
+type ExecutionContext = number;
+
+export const NoContext = 0b000;
+const BatchedContext = 0b001;
+export const RenderContext = 0b010;
+export const CommitContext = 0b100;
+
 type RootExitStatus =
   | typeof RootInProgress
   | typeof RootFatalErrored
@@ -72,6 +85,9 @@ type RootExitStatus =
   | typeof RootSuspendedWithDelay
   | typeof RootCompleted
   | typeof RootDidNotComplete;
+
+/* 描述在React执行堆栈中的位置 */
+let executionContext: ExecutionContext = NoContext;
 
 /**
  * 处理中
@@ -132,11 +148,16 @@ let rootWithPendingPassiveEffects: FiberRoot | null = null;
 let pendingPassiveEffectsLanes: Lanes = NoLanes;
 let pendingPassiveEffectsRemainingLanes: Lanes = NoLanes;
 
+/* 有用于react.lazy中 */
+let workInProgressRootPingedLanes: Lanes = NoLanes;
+
 // 如果此通道调度延迟工作，则此通道为延迟任务的通道。
 let workInProgressDeferredLane: Lane = NoLane;
 // 暂停原因
 let workInProgressSuspendedReason: SuspendedReason = NotSuspended;
 let workInProgressThrownValue: any = null;
+// 在渲染过程中是否附加了ping监听器。这与是否 suspended 略有不同，因为我们不会向已经搜集的Promise添加多个侦听器(每个根和通道)。
+let workInProgressRootDidAttachPingListener = false;
 
 let workInProgressRootExitStatus: RootExitStatus = RootInProgress;
 
@@ -216,6 +237,13 @@ export function performConcurrentWorkOnRoot(
   didTimeout: boolean
 ): RenderTaskFn | null {
   const originalCallbackNode = root.callbackNode;
+  const didFlushPassiveEffects = flushPassiveEffects();
+  if (didFlushPassiveEffects) {
+    if (root.callbackNode !== originalCallbackNode) {
+      return null;
+    } else {
+    }
+  }
 
   let lanes = getNextLanes(
     root,
@@ -520,6 +548,34 @@ function throwAndUnwindWorkLoop(
   unitOfWork: Fiber,
   thrownValue: any
 ) {
+  // 这是performUnitOfWork的一个分支，专门用于展开抛出异常的fiber。
+  //返回正常工作循环。这将展开堆栈，并可能导致显示回退。
+  const returnFiber = unitOfWork.return;
+  try {
+    const didFatal = throwException(
+      root,
+      returnFiber,
+      unitOfWork,
+      thrownValue,
+      workInProgressRootRenderLanes
+    );
+    if (didFatal) {
+      panicOnRootError(root, thrownValue);
+      return;
+    }
+  } catch (error) {
+    // 我们在处理错误时再次遇到错误。
+    // 如当访问错误边界的' componentDidCatch '属性时抛出错误。
+    // 为了防止无限循环，将错误弹出到下一个父级。
+    if (returnFiber !== null) {
+      workInProgress = returnFiber;
+      throw error;
+    } else {
+      panicOnRootError(root, thrownValue);
+      return;
+    }
+  }
+
   if (unitOfWork.flags & Incomplete) {
     unwindUnitOfWork(unitOfWork);
   } else {
@@ -527,8 +583,87 @@ function throwAndUnwindWorkLoop(
   }
 }
 
+export function attachPingListener(
+  root: FiberRoot,
+  wakeable: Wakeable,
+  lanes: Lanes
+) {
+  let pingCache = root.pingCache;
+  let threadIDs;
+  if (pingCache === null) {
+    pingCache = root.pingCache = new WeakMap();
+    threadIDs = new Set<any>();
+    pingCache.set(wakeable, threadIDs);
+  } else {
+    threadIDs = pingCache.get(wakeable);
+    if (threadIDs === undefined) {
+      threadIDs = new Set();
+      pingCache.set(wakeable, threadIDs);
+    }
+  }
+
+  if (!threadIDs.has(lanes)) {
+    workInProgressRootDidAttachPingListener = true;
+
+    threadIDs.add(lanes);
+    const ping = pingSuspendedRoot.bind(null, root, wakeable, lanes);
+    wakeable.then(ping, ping);
+  }
+}
+
+function pingSuspendedRoot(
+  root: FiberRoot,
+  wakeable: Wakeable,
+  pingedLanes: Lanes
+) {
+  const pingCache = root.pingCache;
+  if (pingCache !== null) {
+    pingCache.delete(wakeable);
+  }
+
+  markRootPinged(root, pingedLanes);
+
+  if (
+    workInProgressRoot === root &&
+    isSubsetOfLanes(workInProgressRootRenderLanes, pingedLanes)
+  ) {
+    if (workInProgressRootExitStatus === RootSuspendedWithDelay) {
+      if ((executionContext & RenderContext) === NoContext) {
+        prepareFreshStack(root, NoLanes);
+      } else {
+      }
+    } else {
+      workInProgressRootPingedLanes = mergeLanes(
+        workInProgressRootPingedLanes,
+        pingedLanes
+      );
+    }
+  }
+
+  ensureRootIsScheduled(root);
+}
+
 function handleThrow(root: FiberRoot, thrownValue: any): void {
   // 组件抛出异常，一般是暂停
+  resetHooksAfterThrow();
+
+  const isWakeable =
+    thrownValue !== null &&
+    typeof thrownValue === "object" &&
+    typeof thrownValue.then === "function";
+
+  workInProgressSuspendedReason = isWakeable
+    ? SuspendedOnDeprecatedThrowPromise
+    : SuspendedOnError;
+
+  workInProgressThrownValue = thrownValue;
+
+  const errorWork = workInProgress;
+  if (errorWork === null) {
+    workInProgressRootExitStatus = RootFatalErrored;
+    console.error(`createCapturedValueAtFiber`);
+    return;
+  }
 }
 
 function finishConcurrentRender(
@@ -689,13 +824,17 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes) {
     cancelPendingCommit();
   }
 
+  // resetWorkInProgressStack();
   workInProgressRoot = root;
   const rootWorkInProgress = createWorkInProgress(root.current, null);
   workInProgress = rootWorkInProgress;
   workInProgressRootRenderLanes = lanes;
   workInProgressSuspendedReason = NotSuspended;
+  workInProgressThrownValue = null;
+  workInProgressRootDidAttachPingListener = false;
   workInProgressRootExitStatus = RootInProgress;
   workInProgressRootSkippedLanes = NoLanes;
+  workInProgressRootPingedLanes = NoLanes;
   workInProgressDeferredLane = NoLane;
 
   entangledRenderLanes = getEntangledLanes(root, lanes);
@@ -757,4 +896,25 @@ export function setEntangledRenderLanes(newEntangledRenderLanes: Lanes) {
  */
 export function getEntangledRenderLanes(): Lanes {
   return entangledRenderLanes;
+}
+
+function panicOnRootError(root: FiberRoot, error: any) {
+  workInProgressRootExitStatus = RootFatalErrored;
+  console.error(`createCapturedValueAtFiber`);
+  workInProgress = null;
+}
+
+export function renderDidSuspendDelayIfPossible(): void {
+  workInProgressRootExitStatus = RootSuspendedWithDelay;
+
+  if (
+    includesNonIdleWork(workInProgressRootSkippedLanes) &&
+    workInProgress !== null
+  ) {
+    markRootSuspended(
+      workInProgressRoot!,
+      workInProgressRootRenderLanes,
+      workInProgressDeferredLane
+    );
+  }
 }

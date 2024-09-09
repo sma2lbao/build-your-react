@@ -209,6 +209,10 @@ export function markRootSuspended(
   }
 }
 
+export function markRootPinged(root: FiberRoot, pingedLanes: Lanes) {
+  root.pingedLanes |= root.suspendedLanes & pingedLanes;
+}
+
 /**
  * 标记派生的延迟类任务通道
  * @param root

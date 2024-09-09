@@ -13,6 +13,7 @@ import {
   REACT_CONTEXT_TYPE,
   REACT_ELEMENT_TYPE,
   REACT_FRAGMENT_TYPE,
+  REACT_LAZY_TYPE,
   getIteratorFn,
 } from "shared/react-symbols";
 import { ReactContext } from "shared/react-types";
@@ -80,6 +81,18 @@ function createChildReconciler(
               newChild,
               lanes
             )
+          );
+          return firstChild;
+        }
+        case REACT_LAZY_TYPE: {
+          const payload = newChild._payload;
+          const init = newChild._init;
+          const result = init(payload);
+          const firstChild = reconcileChildFibersImpl(
+            returnFiber,
+            currentFirstChild,
+            result,
+            lanes
           );
           return firstChild;
         }
@@ -153,7 +166,13 @@ function createChildReconciler(
             return existing;
           }
         } else {
-          if (child.elementType === elementType) {
+          if (
+            child.elementType === elementType ||
+            (typeof elementType === "object" &&
+              elementType !== null &&
+              elementType.$$typeof === REACT_LAZY_TYPE &&
+              resolveLazy(elementType) === child.type)
+          ) {
             // 单节点删除其他兄弟节点
             deleteRemainingChildren(returnFiber, child.sibling);
             const existing = useFiber(child, element.props);
@@ -438,6 +457,18 @@ function createChildReconciler(
             return null;
           }
         }
+        case REACT_LAZY_TYPE: {
+          const payload = newChild._payload;
+          const init = newChild._init;
+          const resolvedChild = init(payload);
+          const updated = updateSlot(
+            returnFiber,
+            oldFiber,
+            resolvedChild,
+            lanes
+          );
+          return updated;
+        }
       }
 
       if (Array.isArray(newChild) || getIteratorFn(newChild)) {
@@ -503,6 +534,19 @@ function createChildReconciler(
 
           return updated;
         }
+        case REACT_LAZY_TYPE: {
+          const payload = newChild._payload;
+          const init = newChild._init;
+          const resolvedChild = init(payload);
+          const updated = updateFromMap(
+            existingChildren,
+            returnFiber,
+            newIdx,
+            resolvedChild,
+            lanes
+          );
+          return updated;
+        }
       }
 
       if (Array.isArray(newChild) || getIteratorFn(newChild)) {
@@ -563,6 +607,13 @@ function createChildReconciler(
           );
           coerceRef(returnFiber, null, created, newChild);
           created.return = returnFiber;
+          return created;
+        }
+        case REACT_LAZY_TYPE: {
+          const payload = newChild._payload;
+          const init = newChild._init;
+          const resolvedChild = init(payload);
+          const created = createChild(returnFiber, resolvedChild, lanes);
           return created;
         }
       }
@@ -657,7 +708,13 @@ function createChildReconciler(
 
     // 更新
     if (current !== null) {
-      if (current.elementType === elementType) {
+      if (
+        current.elementType === elementType ||
+        (typeof elementType === "object" &&
+          elementType !== null &&
+          elementType.$$typeof === REACT_LAZY_TYPE &&
+          resolveLazy(elementType) === current.type)
+      ) {
         const existing = useFiber(current, element.props);
         coerceRef(returnFiber, current, existing, element);
         existing.return = returnFiber;
@@ -736,4 +793,10 @@ export function cloneChildFibers(
     newChild.return = workInProgress;
   }
   newChild.sibling = null;
+}
+
+function resolveLazy(lazyType: any) {
+  const payload = lazyType._payload;
+  const init = lazyType._init;
+  return init(payload);
 }

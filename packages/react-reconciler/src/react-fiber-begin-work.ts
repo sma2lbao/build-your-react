@@ -22,6 +22,7 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  LazyComponent,
   MemoComponent,
   OffscreenComponent,
   SimpleMemoComponent,
@@ -60,6 +61,7 @@ import {
   pushHiddenContext,
   reuseHiddenContextOnStack,
 } from "./react-fiber-hidden-context";
+import { LazyComponent as LazyComponentType } from "react/react-lazy";
 
 let didReceiveUpdate: boolean = false;
 
@@ -110,6 +112,15 @@ export function beginWork(
   workInProgress.lanes = NoLanes;
 
   switch (workInProgress.tag) {
+    case LazyComponent: {
+      const elementType = workInProgress.elementType;
+      return mountLazyComponent(
+        current,
+        workInProgress,
+        elementType,
+        renderLanes
+      );
+    }
     case HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
     case MemoComponent: {
@@ -442,7 +453,6 @@ function updateOffscreenComponent(
   workInProgress: Fiber,
   renderLanes: Lanes
 ) {
-  debugger;
   const nextProps: OffscreenProps = workInProgress.pendingProps;
   const nextChildren = nextProps.children;
   const nextIsDetached =
@@ -516,6 +526,36 @@ function deferHiddenOffscreenComponent(
 
   reuseHiddenContextOnStack(workInProgress);
   return null;
+}
+
+function mountLazyComponent(
+  _current: Fiber | null,
+  workInProgress: Fiber,
+  elementType: any,
+  renderLanes: Lanes
+) {
+  const props = workInProgress.pendingProps;
+  const lazyComponent: LazyComponentType<any, any> = elementType;
+  const payload = lazyComponent._payload;
+  const init = lazyComponent._init;
+  const Component = init(payload);
+  workInProgress.type = Component;
+
+  if (typeof Component === "function") {
+    // 已解析并返回函数组件
+    workInProgress.tag = FunctionComponent;
+    return updateFunctionComponent(
+      null,
+      workInProgress,
+      Component,
+      props,
+      renderLanes
+    );
+  }
+  throw new Error(
+    `Element type is invalid. Received a promise that resolves to: ${Component}. ` +
+      `Lazy element type must resolve to a class or function.`
+  );
 }
 
 /**

@@ -275,7 +275,6 @@ function commitMutationEffectsOnFiber(
           }
         } else {
         }
-        debugger;
         if (supportsMutation && !isOffscreenManual(finishedWork)) {
           hideOrUnhideAllChildren(finishedWork, isHidden);
         }

@@ -2,6 +2,7 @@ import {
   REACT_CONSUMER_TYPE,
   REACT_CONTEXT_TYPE,
   REACT_FRAGMENT_TYPE,
+  REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
   REACT_OFFSCREEN_TYPE,
 } from "shared/react-symbols";
@@ -22,6 +23,7 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  LazyComponent,
   MemoComponent,
   OffscreenComponent,
   WorkTag,
@@ -141,6 +143,10 @@ export function createFiberFromTypeAndProps(
               break getTag;
             case REACT_MEMO_TYPE:
               fiberTag = MemoComponent;
+              break getTag;
+            case REACT_LAZY_TYPE:
+              fiberTag = LazyComponent;
+              resolvedType = null;
               break getTag;
           }
         }

@@ -24,6 +24,7 @@ import {
   HostComponent,
   HostRoot,
   HostText,
+  LazyComponent,
   MemoComponent,
   OffscreenComponent,
   SimpleMemoComponent,
@@ -67,6 +68,7 @@ export function completeWork(
       bubbleProperties(workInProgress);
       return null;
     }
+    case LazyComponent:
     case Fragment:
     case ContextConsumer:
     case MemoComponent:
