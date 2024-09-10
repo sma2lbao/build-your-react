@@ -45,6 +45,8 @@ export const Passive = 0b0000000000000000100000000000;
  */
 export const Visibility = 0b0000000000000010000000000000;
 
+export const StoreConsistency = 0b0000000000000100000000000000;
+
 export const HostEffectMask = 0b0000000000000111111111111111;
 
 /**
@@ -62,6 +64,10 @@ export const LayoutStatic = 0b0000010000000000000000000000;
 export const PassiveStatic = 0b0000100000000000000000000000;
 
 export const RefStatic = 0b0000001000000000000000000000;
+
+// 可以重用这些 bit 位，因为这些标志对于不同的fiber类型是互斥的。bit 数量问题。
+export const ScheduleRetry = StoreConsistency;
+export const DidDefer = ContentReset;
 
 export const BeforeMutationMask = Update | ChildDeletion;
 

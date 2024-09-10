@@ -6,11 +6,13 @@ import {
 } from "./react-child-fiber";
 import {
   Lanes,
+  NoLane,
   NoLanes,
   OffscreenLane,
   includesSomeLane,
   laneToLanes,
   mergeLanes,
+  removeLanes,
 } from "./react-fiber-lane";
 import { RootState } from "./react-fiber-root";
 import { Fiber, FiberRoot } from "./react-internal-types";
@@ -26,6 +28,7 @@ import {
   MemoComponent,
   OffscreenComponent,
   SimpleMemoComponent,
+  SuspenseComponent,
 } from "./react-work-tags";
 import { pushHostContainer } from "./react-fiber-host-context";
 import {
@@ -37,14 +40,28 @@ import {
   renderWithHooks,
   replaySuspendedComponentWithHooks,
 } from "./react-fiber-hooks";
-import { ContentReset, Ref } from "./react-fiber-flags";
 import {
+  ChildDeletion,
+  ContentReset,
+  DidCapture,
+  DidDefer,
+  NoFlags,
+  Placement,
+  Ref,
+  StaticMask,
+} from "./react-fiber-flags";
+import {
+  createFiberFromFragment,
+  createFiberFromOffscreen,
   createFiberFromTypeAndProps,
   createWorkInProgress,
   isSimpleFunctionComponent,
 } from "./react-fiber";
 import shallowEqual from "shared/shallow-equal";
-import { markSkippedUpdateLanes } from "./react-fiber-work-loop";
+import {
+  markSkippedUpdateLanes,
+  peekDeferredLane,
+} from "./react-fiber-work-loop";
 import {
   prepareToReadContext,
   propagateContextChange,
@@ -62,8 +79,21 @@ import {
   reuseHiddenContextOnStack,
 } from "./react-fiber-hidden-context";
 import { LazyComponent as LazyComponentType } from "react/react-lazy";
+import { SuspenseState } from "./react-fiber-suspense-component";
+import {
+  ForceSuspenseFallback,
+  hasSuspenseListContext,
+  pushFallbackTreeSuspenseHandler,
+  pushOffscreenSuspenseHandler,
+  pushPrimaryTreeSuspenseHandler,
+  suspenseStackCursor,
+} from "./react-fiber-suspense-context";
 
 let didReceiveUpdate: boolean = false;
+
+const SUSPENDED_MARKER: SuspenseState = {
+  retryLane: NoLane,
+};
 
 /**
  * 处理 workInProgress Fiber任务，并获取下一个任务
@@ -161,6 +191,8 @@ export function beginWork(
       return updateHostComponent(current, workInProgress, renderLanes);
     case HostText:
       return updateHostText(current, workInProgress);
+    case SuspenseComponent:
+      return updateSuspenseComponent(current, workInProgress, renderLanes);
     case ContextProvider:
       return updateContextProvider(current, workInProgress, renderLanes);
     case ContextConsumer:
@@ -287,6 +319,242 @@ function updateHostComponent(
 
 function updateHostText(current: null | Fiber, workInProgress: Fiber) {
   return null;
+}
+
+function updateSuspenseComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  const nextProps = workInProgress.pendingProps;
+
+  let showFallback = false;
+  const didSuspend = (workInProgress.flags & DidCapture) !== NoFlags;
+  if (
+    didSuspend ||
+    shouldRemainOnFallback(current, workInProgress, renderLanes)
+  ) {
+    showFallback = true;
+    workInProgress.flags &= ~DidCapture;
+  }
+
+  const didPrimaryChildrenDefer = (workInProgress.flags & DidDefer) !== NoFlags;
+  workInProgress.flags &= ~DidDefer;
+
+  if (current === null) {
+    const nextPrimaryChildren = nextProps.children;
+    const nextFallbackChildren = nextProps.fallback;
+
+    if (showFallback) {
+      pushFallbackTreeSuspenseHandler(workInProgress);
+
+      const fallbackFragment = mountSuspenseFallbackChildren(
+        workInProgress,
+        nextPrimaryChildren,
+        nextFallbackChildren,
+        renderLanes
+      );
+      const primaryChildFragment = workInProgress.child as Fiber;
+      primaryChildFragment.memoizedState = {
+        cachePool: null,
+        baseLanes: renderLanes,
+      } as OffscreenState;
+      primaryChildFragment.childLanes = getRemainingWorkInPrimaryTree(
+        current,
+        didPrimaryChildrenDefer,
+        renderLanes
+      );
+      workInProgress.memoizedState = SUSPENDED_MARKER;
+
+      return fallbackFragment;
+    } else {
+      pushPrimaryTreeSuspenseHandler(workInProgress);
+      return mountSuspensePrimaryChildren(
+        workInProgress,
+        nextPrimaryChildren,
+        renderLanes
+      );
+    }
+  } else {
+    // 更新
+    if (showFallback) {
+      pushFallbackTreeSuspenseHandler(workInProgress);
+
+      const nextFallbackChildren = nextProps.fallback;
+      const nextPrimaryChildren = nextProps.children;
+      const fallbackChildFragment = updateSuspenseFallbackChildren(
+        current,
+        workInProgress,
+        nextPrimaryChildren,
+        nextFallbackChildren,
+        renderLanes
+      );
+      const primaryChildFragment = workInProgress.child as Fiber;
+      const prevOffscreenState = current.child!
+        .memoizedState as OffscreenState | null;
+      primaryChildFragment.memoizedState = {
+        baseLanes:
+          prevOffscreenState === null
+            ? renderLanes
+            : mergeLanes(prevOffscreenState.baseLanes, renderLanes),
+        cachePool: null,
+      } as OffscreenState;
+
+      primaryChildFragment.childLanes = getRemainingWorkInPrimaryTree(
+        current,
+        didPrimaryChildrenDefer,
+        renderLanes
+      );
+      workInProgress.memoizedState = SUSPENDED_MARKER;
+      return fallbackChildFragment;
+    } else {
+      pushPrimaryTreeSuspenseHandler(workInProgress);
+
+      const nextPrimaryChildren = nextProps.children;
+      const primaryChildFragment = updateSuspensePrimaryChildren(
+        current,
+        workInProgress,
+        nextPrimaryChildren,
+        renderLanes
+      );
+      workInProgress.memoizedState = null;
+      return primaryChildFragment;
+    }
+  }
+}
+
+function mountSuspenseFallbackChildren(
+  workInProgress: Fiber,
+  primaryChildren: any,
+  fallbackChildren: any,
+  renderLanes: Lanes
+) {
+  const mode = workInProgress.mode;
+  const primaryChildProps: OffscreenProps = {
+    mode: "hidden",
+    children: primaryChildren,
+  };
+
+  const primaryChildFragment = createFiberFromOffscreen(
+    primaryChildProps,
+    mode,
+    NoLanes,
+    null
+  );
+  const fallbackChildFragment = createFiberFromFragment(
+    fallbackChildren,
+    mode,
+    renderLanes,
+    null
+  );
+
+  primaryChildFragment.return = workInProgress;
+  fallbackChildFragment.return = workInProgress;
+  primaryChildFragment.sibling = fallbackChildFragment;
+  workInProgress.child = primaryChildFragment;
+  return fallbackChildFragment;
+}
+
+function updateSuspenseFallbackChildren(
+  current: Fiber,
+  workInProgress: Fiber,
+  primaryChildren: any,
+  fallbackChildren: any,
+  renderLanes: Lanes
+) {
+  const mode = workInProgress.mode;
+  const currentPrimaryChildFragment = current.child!;
+  const currentFallbackChildFragment = currentPrimaryChildFragment.sibling;
+
+  const primaryChildProps: OffscreenProps = {
+    mode: "hidden",
+    children: primaryChildren,
+  };
+  // 复用 current 的 Offscreen 组件
+  const primaryChildFragment = createWorkInProgress(
+    currentPrimaryChildFragment,
+    primaryChildProps
+  );
+  primaryChildFragment.subtreeFlags =
+    currentPrimaryChildFragment.subtreeFlags & StaticMask;
+
+  let fallbackChildFragment;
+  if (currentFallbackChildFragment !== null) {
+    // 复用
+    fallbackChildFragment = createWorkInProgress(
+      currentFallbackChildFragment,
+      fallbackChildren
+    );
+  } else {
+    // 用 Fragment 包裹
+    fallbackChildFragment = createFiberFromFragment(
+      fallbackChildren,
+      mode,
+      renderLanes,
+      null
+    );
+    fallbackChildFragment.flags |= Placement;
+  }
+
+  fallbackChildFragment.return = workInProgress;
+  primaryChildFragment.return = workInProgress;
+  primaryChildFragment.sibling = fallbackChildFragment;
+  workInProgress.child = primaryChildFragment;
+
+  return fallbackChildFragment;
+}
+
+function mountSuspensePrimaryChildren(
+  workInProgress: Fiber,
+  primaryChildren: any,
+  renderLanes: Lanes
+) {
+  const mode = workInProgress.mode;
+  const primaryChildProps: OffscreenProps = {
+    mode: "visible",
+    children: primaryChildren,
+  };
+  const primaryChildFragment = createFiberFromOffscreen(
+    primaryChildProps,
+    mode,
+    renderLanes,
+    null
+  );
+  primaryChildFragment.return = workInProgress;
+  workInProgress.child = primaryChildFragment;
+  return primaryChildFragment;
+}
+
+function updateSuspensePrimaryChildren(
+  current: Fiber,
+  workInProgress: Fiber,
+  primaryChildren: any,
+  renderLanes: Lanes
+) {
+  const currentPrimaryChildFragment = current.child!;
+  const currentFallbackChildFragment = currentPrimaryChildFragment.sibling;
+
+  const primaryChildFragment = createWorkInProgress(
+    currentPrimaryChildFragment,
+    {
+      mode: "visible",
+      children: primaryChildren,
+    }
+  );
+  primaryChildFragment.return = workInProgress;
+  primaryChildFragment.sibling = null;
+  if (currentFallbackChildFragment !== null) {
+    const deletions = workInProgress.deletions;
+    if (deletions === null) {
+      workInProgress.deletions = [currentFallbackChildFragment];
+      workInProgress.flags |= ChildDeletion;
+    } else {
+      deletions.push(currentFallbackChildFragment);
+    }
+  }
+
+  workInProgress.child = primaryChildFragment;
+  return primaryChildFragment;
 }
 
 function updateMemoComponent(
@@ -492,6 +760,7 @@ function updateOffscreenComponent(
       } else {
         reuseHiddenContextOnStack(workInProgress);
       }
+      pushOffscreenSuspenseHandler(workInProgress);
     }
   } else {
     // 渲染可见树
@@ -525,7 +794,25 @@ function deferHiddenOffscreenComponent(
   workInProgress.memoizedState = nextState;
 
   reuseHiddenContextOnStack(workInProgress);
+  pushOffscreenSuspenseHandler(workInProgress);
   return null;
+}
+
+/**
+ * 获取 suspense 的真实子组件的优先级
+ */
+function getRemainingWorkInPrimaryTree(
+  current: Fiber | null,
+  primaryTreeDidDefer: boolean,
+  renderLanes: Lanes
+) {
+  let remainingLanes =
+    current !== null ? removeLanes(current.childLanes, renderLanes) : NoLanes;
+  if (primaryTreeDidDefer) {
+    // 一个useDeferredValue钩子在主树中生成一个延迟的任务。确保我们以延迟的优先级重试该组件。
+    remainingLanes = mergeLanes(remainingLanes, peekDeferredLane());
+  }
+  return remainingLanes;
 }
 
 function mountLazyComponent(
@@ -667,6 +954,32 @@ function attemptEarlyBailoutIfNoScheduledUpdate(
       pushHostRootContext(workInProgress);
       // TODO
       break;
+    case SuspenseComponent: {
+      const state: SuspenseState | null = workInProgress.memoizedState;
+      if (state !== null) {
+        const primaryChildFragment = workInProgress.child!;
+        const primaryChildLanes = primaryChildFragment.childLanes;
+        if (includesSomeLane(renderLanes, primaryChildLanes)) {
+          // 子进程有待处理的工作。使用正常路径尝试再次渲染主要子节点。
+          return updateSuspenseComponent(current, workInProgress, renderLanes);
+        } else {
+          pushPrimaryTreeSuspenseHandler(workInProgress);
+          const child = bailoutOnAlreadyFinishedWork(
+            current,
+            workInProgress,
+            renderLanes
+          );
+          if (child !== null) {
+            return child.sibling;
+          } else {
+            return null;
+          }
+        }
+      } else {
+        pushPrimaryTreeSuspenseHandler(workInProgress);
+      }
+      break;
+    }
     case OffscreenComponent: {
       workInProgress.lanes = NoLanes;
       return updateOffscreenComponent(current, workInProgress, renderLanes);
@@ -674,4 +987,23 @@ function attemptEarlyBailoutIfNoScheduledUpdate(
   }
 
   return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+}
+
+/**
+ * 是否保留 fallback
+ */
+function shouldRemainOnFallback(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  if (current !== null) {
+    const suspenseState = current.memoizedState as SuspenseState;
+    if (suspenseState === null) {
+      return false;
+    }
+  }
+
+  const suspenseContext = suspenseStackCursor.current;
+  return hasSuspenseListContext(suspenseContext, ForceSuspenseFallback);
 }

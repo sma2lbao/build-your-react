@@ -43,6 +43,14 @@ const TransitionLane13: Lane = /*                       */ 0b0000000000010000000
 const TransitionLane14: Lane = /*                       */ 0b0000000000100000000000000000000;
 const TransitionLane15: Lane = /*                       */ 0b0000000001000000000000000000000;
 
+const RetryLanes: Lanes = 0b0000011110000000000000000000000;
+const RetryLane1: Lane = 0b0000000010000000000000000000000;
+const RetryLane2: Lane = 0b0000000100000000000000000000000;
+const RetryLane3: Lane = 0b0000001000000000000000000000000;
+const RetryLane4: Lane = 0b0000010000000000000000000000000;
+
+export const SomeRetryLane: Lane = RetryLane1;
+
 /**
  * 空闲阶段任务
  */
@@ -54,6 +62,7 @@ export const IdleLane: Lane = 0b0010000000000000000000000000000;
 export const OffscreenLane: Lane = 0b0100000000000000000000000000000;
 
 let nextTransitionLane: Lane = TransitionLane1;
+let nextRetryLane: Lane = RetryLane1;
 
 export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
   const pendingLanes = root.pendingLanes;
@@ -191,7 +200,7 @@ export function markRootUpdated(root: FiberRoot, updateLane: Lane) {
 }
 
 /**
- * 标记暂停任务
+ * 标记挂起任务
  * @param root
  * @param suspendedLanes
  * @param spawnedLane
@@ -236,6 +245,10 @@ export function includesSyncLane(lanes: Lanes): boolean {
 
 export function includesNonIdleWork(lanes: Lanes): boolean {
   return (lanes & NonIdleLanes) !== NoLanes;
+}
+
+export function includesOnlyRetries(lanes: Lanes): boolean {
+  return (lanes & RetryLanes) === lanes;
 }
 
 export function includesExpiredLane(root: FiberRoot, lanes: Lanes): boolean {
@@ -319,6 +332,22 @@ export function claimNextTransitionLane(): Lane {
     nextTransitionLane = TransitionLane1;
   }
 
+  return lane;
+}
+
+/**
+ * 管理 React 中的重试车道。
+ * 每当需要重试某些任务时，它会返回当前的 nextRetryLane，
+ * 然后将其左移一位以准备下一个重试。
+ * 如果车道耗尽，重试车道会重置为初始值 RetryLane1。
+ * @returns
+ */
+export function claimNextRetryLane(): Lane {
+  const lane = nextRetryLane;
+  nextRetryLane << 1;
+  if ((nextRetryLane & RetryLanes) === NoLanes) {
+    nextRetryLane = RetryLane1;
+  }
   return lane;
 }
 

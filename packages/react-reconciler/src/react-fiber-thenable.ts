@@ -6,3 +6,7 @@ export function isThenableResolved(thenable: Thenable<any>): boolean {
 }
 
 export type ThenableState = Array<Thenable<any>>;
+
+export const noopSuspenseyCommitThenable = {
+  then() {},
+};

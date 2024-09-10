@@ -14,6 +14,8 @@ export const REACT_OFFSCREEN_TYPE = Symbol.for("react.offscreen");
 
 export const REACT_LAZY_TYPE = Symbol.for("react.lazy");
 
+export const REACT_SUSPENSE_TYPE = Symbol.for("react.suspense");
+
 const MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
 const FAUX_ITERATOR_SYMBOL = "@@iterator";
 

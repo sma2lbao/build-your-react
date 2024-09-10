@@ -41,6 +41,7 @@ import {
   MemoComponent,
   OffscreenComponent,
   SimpleMemoComponent,
+  SuspenseComponent,
 } from "./react-work-tags";
 import {
   HookFlags,
@@ -60,8 +61,13 @@ import {
   OffscreenVisible,
   isOffscreenManual,
 } from "./react-fiber-activity-component";
-import { scheduleUpdateOnFiber } from "./react-fiber-work-loop";
+import {
+  markCommitTimeOfFallback,
+  resolveRetryWakeable,
+  scheduleUpdateOnFiber,
+} from "./react-fiber-work-loop";
 import { enqueueConcurrentRenderForLane } from "./react-fiber-concurrent-updates";
+import { RetryQueue } from "./react-fiber-suspense-component";
 
 /**
  * 下一个有副作用的Fiber
@@ -284,6 +290,29 @@ function commitMutationEffectsOnFiber(
         // TODO
       }
 
+      return;
+    }
+    case SuspenseComponent: {
+      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+      commitReconciliationEffects(finishedWork);
+
+      const offscreenFiber = finishedWork.child!;
+      if (offscreenFiber.flags & Visibility) {
+        const isShowingFallback = finishedWork.memoizedState !== null;
+        const wasShowingFallback =
+          current !== null && current.memoizedState !== null;
+        if (isShowingFallback !== wasShowingFallback) {
+          markCommitTimeOfFallback();
+        }
+      }
+
+      if (flags & Update) {
+        const retryQueue: RetryQueue | null = finishedWork.updateQueue;
+        if (retryQueue !== null) {
+          finishedWork.updateQueue = null;
+          attachSuspenseRetryListeners(finishedWork, retryQueue);
+        }
+      }
       return;
     }
     default: {
@@ -659,7 +688,8 @@ function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
       if (
         isHidden &&
         instance._visibility & OffscreenPassiveEffectsConnected &&
-        finishedWork.return === null
+        (finishedWork.return === null ||
+          finishedWork.return.tag !== SuspenseComponent)
       ) {
         instance._visibility &= ~OffscreenPassiveEffectsConnected;
         recursivelyTraverseDisconnectPassiveEffects(finishedWork);
@@ -1546,5 +1576,41 @@ export function disappearLayoutEffects(finishedWork: Fiber) {
     default:
       recursivelyTraverseDisappearLayoutEffects(finishedWork);
       break;
+  }
+}
+
+function attachSuspenseRetryListeners(
+  finishedWork: Fiber,
+  wakeables: RetryQueue
+) {
+  // 如果这个边界刚刚超时，那么它将有一组可唤醒对象。
+  // 对于每个可唤醒对象，附加一个侦听器，以便当它解析时，
+  // React尝试以主(超时前)状态重新呈现边界。
+  const retryCache = getRetryCache(finishedWork);
+  wakeables.forEach((wakeable) => {
+    const retry = resolveRetryWakeable.bind(null, finishedWork, wakeable);
+    if (!retryCache.has(wakeable)) {
+      retryCache.add(wakeable);
+
+      wakeable.then(retry, retry);
+    }
+  });
+}
+
+function getRetryCache(finishedWork: Fiber) {
+  switch (finishedWork.tag) {
+    case SuspenseComponent: {
+      let retryCache = finishedWork.stateNode;
+      if (retryCache === null) {
+        retryCache = finishedWork.stateNode = new WeakSet();
+      }
+      return retryCache;
+    }
+    default: {
+      throw new Error(
+        `Unexpected Suspense handler tag (${finishedWork.tag}). This is a ` +
+          "bug in React."
+      );
+    }
   }
 }

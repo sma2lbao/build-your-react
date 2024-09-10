@@ -1,6 +1,7 @@
 import {
   REACT_FRAGMENT_TYPE,
   REACT_OFFSCREEN_TYPE,
+  REACT_SUSPENSE_TYPE,
 } from "shared/react-symbols";
 
 import { createElement } from "./jsx/react-jsx-element";
@@ -38,5 +39,6 @@ export {
   useContext,
   REACT_FRAGMENT_TYPE as Fragment,
   REACT_OFFSCREEN_TYPE as unstable_Activity,
+  REACT_SUSPENSE_TYPE as Suspense,
   ReactSharedInternals as __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
 };

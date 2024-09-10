@@ -5,6 +5,7 @@ import {
   REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
   REACT_OFFSCREEN_TYPE,
+  REACT_SUSPENSE_TYPE,
 } from "shared/react-symbols";
 import { NoFlags, Placement } from "./react-fiber-flags";
 import { Lanes, NoLanes } from "./react-fiber-lane";
@@ -26,6 +27,7 @@ import {
   LazyComponent,
   MemoComponent,
   OffscreenComponent,
+  SuspenseComponent,
   WorkTag,
 } from "./react-work-tags";
 import { ReactElement } from "shared/react-element-type";
@@ -76,6 +78,18 @@ export function createFiberFromOffscreen(
     attach: () => attachOffscreenInstance(primaryChildInstance),
   };
   fiber.stateNode = primaryChildInstance;
+  return fiber;
+}
+
+export function createFiberFromSuspense(
+  pendingProps: any,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: string | null
+): Fiber {
+  const fiber = createFiber(SuspenseComponent, pendingProps, key, mode);
+  fiber.elementType = REACT_SUSPENSE_TYPE;
+  fiber.lanes = lanes;
   return fiber;
 }
 
@@ -132,6 +146,8 @@ export function createFiberFromTypeAndProps(
         return createFiberFromFragment(pendingProps.children, mode, lanes, key);
       case REACT_OFFSCREEN_TYPE:
         return createFiberFromOffscreen(pendingProps, mode, lanes, key);
+      case REACT_SUSPENSE_TYPE:
+        return createFiberFromSuspense(pendingProps, mode, lanes, key);
       default: {
         if (typeof type === "object" && type !== null) {
           switch (type.$$typeof) {

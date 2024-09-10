@@ -17,6 +17,7 @@ import {
 } from "./react-fiber-commit-work";
 import { completeWork } from "./react-fiber-complete-work";
 import {
+  enqueueConcurrentRenderForLane,
   finishQueueingConcurrentUpdates,
   getConcurrentlyUpdatedLanes,
 } from "./react-fiber-concurrent-updates";
@@ -35,16 +36,18 @@ import {
   Lanes,
   NoLane,
   NoLanes,
+  claimNextRetryLane,
   claimNextTransitionLane,
   getEntangledLanes,
   getNextLanes,
   includesBlockingLane,
   includesExpiredLane,
   includesNonIdleWork,
+  includesOnlyRetries,
   isSubsetOfLanes,
   markRootFinished,
   markRootPinged,
-  markRootSuspended,
+  markRootSuspended as _markRootSuspended,
   markRootUpdated,
   mergeLanes,
   removeLanes,
@@ -58,17 +61,23 @@ import { isThenableResolved } from "./react-fiber-thenable";
 import { throwException } from "./react-fiber-throw";
 import { unwindInterruptedWork, unwindWork } from "./react-fiber-unwind-work";
 import { Fiber, FiberRoot } from "./react-internal-types";
-import { FunctionComponent, HostComponent } from "./react-work-tags";
+import {
+  FunctionComponent,
+  HostComponent,
+  SuspenseComponent,
+} from "./react-work-tags";
 import {
   scheduleCallback,
   shouldYield,
   NormalPriority as NormalSchedulerPriority,
+  now,
 } from "./scheduler";
 import {
   resolveUpdatePriority,
   setCurrentUpdatePriority,
   getCurrentUpdatePriority,
 } from "react-fiber-config";
+import { SuspenseState } from "./react-fiber-suspense-component";
 
 type ExecutionContext = number;
 
@@ -166,6 +175,10 @@ let workInProgressRootSkippedLanes: Lanes = NoLanes;
 
 // begin/complete 阶段处理的相互有依赖关系的优先级.
 export let entangledRenderLanes: Lanes = NoLanes;
+
+// 最近一次提交fallback，或者当fallback被解析的UI填充时。这让我们可以在新内容流进来的时候控制它的出现，以减少干扰。
+let globalMostRecentFallbackTime = 0;
+const FALLBACK_THROTTLE_MS = 300;
 
 /**
  * 调度更新入口
@@ -610,7 +623,12 @@ export function attachPingListener(
     wakeable.then(ping, ping);
   }
 }
-
+/**
+ * 一般如果没有 Suspense 组件（如 React.lazy）会走这调度更新
+ * @param root
+ * @param wakeable
+ * @param pingedLanes
+ */
 function pingSuspendedRoot(
   root: FiberRoot,
   wakeable: Wakeable,
@@ -627,7 +645,12 @@ function pingSuspendedRoot(
     workInProgressRoot === root &&
     isSubsetOfLanes(workInProgressRootRenderLanes, pingedLanes)
   ) {
-    if (workInProgressRootExitStatus === RootSuspendedWithDelay) {
+    if (
+      workInProgressRootExitStatus === RootSuspendedWithDelay ||
+      (workInProgressRootExitStatus === RootSuspended &&
+        includesOnlyRetries(workInProgressRootRenderLanes) &&
+        now() - globalMostRecentFallbackTime < FALLBACK_THROTTLE_MS)
+    ) {
       if ((executionContext & RenderContext) === NoContext) {
         prepareFreshStack(root, NoLanes);
       } else {
@@ -917,4 +940,74 @@ export function renderDidSuspendDelayIfPossible(): void {
       workInProgressDeferredLane
     );
   }
+}
+
+export function peekDeferredLane(): Lane {
+  return workInProgressDeferredLane;
+}
+
+export function markCommitTimeOfFallback() {
+  globalMostRecentFallbackTime = now();
+}
+
+export function renderDidSuspend() {
+  if (workInProgressRootExitStatus === RootInProgress) {
+    workInProgressRootExitStatus = RootSuspended;
+  }
+}
+
+/**
+ * commit阶段会给 异步组件绑定回调。在状态改变后会调用，如 Suspense 组件在lazy引入的组件加载后会触发
+ * @param boundaryFiber
+ * @param wakeable
+ */
+export function resolveRetryWakeable(boundaryFiber: Fiber, wakeable: Wakeable) {
+  debugger;
+  let retryLane: Lane = NoLane;
+  let retryCache: WeakSet<Wakeable> | null;
+  switch (boundaryFiber.tag) {
+    case SuspenseComponent: {
+      retryCache = boundaryFiber.stateNode;
+      const suspenseState: SuspenseState | null = boundaryFiber.memoizedState;
+      if (suspenseState !== null) {
+        retryLane = suspenseState.retryLane;
+      }
+      break;
+    }
+    default:
+      throw new Error(
+        "Pinged unknown suspense boundary type. " +
+          "This is probably a bug in React."
+      );
+  }
+
+  if (retryCache !== null) {
+    retryCache!.delete(wakeable);
+  }
+
+  retryTimedOutBoundary(boundaryFiber, retryLane);
+}
+
+function retryTimedOutBoundary(boundaryFiber: Fiber, retryLane: Lane) {
+  if (retryLane === NoLane) {
+    retryLane = requestRetryLane(boundaryFiber);
+  }
+  const root = enqueueConcurrentRenderForLane(boundaryFiber, retryLane);
+  if (root !== null) {
+    markRootUpdated(root, retryLane);
+    ensureRootIsScheduled(root);
+  }
+}
+
+function requestRetryLane(fiber: Fiber) {
+  return claimNextRetryLane();
+}
+
+function markRootSuspended(
+  root: FiberRoot,
+  suspendedLanes: Lanes,
+  spawnedLane: Lane
+) {
+  suspendedLanes = removeLanes(suspendedLanes, workInProgressRootPingedLanes);
+  _markRootSuspended(root, suspendedLanes, spawnedLane);
 }

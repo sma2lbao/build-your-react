@@ -10,6 +10,7 @@ export type WorkTag =
   | typeof Fragment
   | typeof ContextConsumer
   | typeof ContextProvider
+  | typeof SuspenseComponent
   | typeof MemoComponent
   | typeof SimpleMemoComponent
   | typeof LazyComponent
@@ -45,6 +46,11 @@ export const Fragment = 7;
 export const ContextConsumer = 9;
 
 export const ContextProvider = 10;
+
+/**
+ * Suspense 组件标识
+ */
+export const SuspenseComponent = 13;
 
 /**
  * 可缓存组件

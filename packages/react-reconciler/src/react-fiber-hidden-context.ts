@@ -38,3 +38,7 @@ export function reuseHiddenContextOnStack(fiber: Fiber): void {
   push(prevEntangledRenderLanesCursor, getEntangledRenderLanes());
   push(currentTreeHiddenStackCursor, currentTreeHiddenStackCursor.current);
 }
+
+export function isCurrentTreeHidden(): boolean {
+  return currentTreeHiddenStackCursor.current !== null;
+}

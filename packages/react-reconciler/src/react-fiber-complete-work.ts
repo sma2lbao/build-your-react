@@ -12,6 +12,7 @@ import {
   Lanes,
   NoLanes,
   OffscreenLane,
+  claimNextRetryLane,
   includesSomeLane,
   mergeLanes,
 } from "./react-fiber-lane";
@@ -28,6 +29,7 @@ import {
   MemoComponent,
   OffscreenComponent,
   SimpleMemoComponent,
+  SuspenseComponent,
 } from "./react-work-tags";
 import {
   getRootHostContainer,
@@ -37,6 +39,7 @@ import {
   DidCapture,
   NoFlags,
   Placement,
+  ScheduleRetry,
   StaticMask,
   Update,
   Visibility,
@@ -45,6 +48,8 @@ import { ReactContext } from "shared/react-types";
 import { popProvider } from "./react-fiber-new-context";
 import { popHiddenContext } from "./react-fiber-hidden-context";
 import { OffscreenState } from "./react-fiber-activity-component";
+import { RetryQueue, SuspenseState } from "./react-fiber-suspense-component";
+import { popSuspenseHandler } from "./react-fiber-suspense-context";
 
 function markUpdate(workInProgress: Fiber) {
   workInProgress.flags |= Update;
@@ -143,6 +148,33 @@ export function completeWork(
       }
 
       bubbleProperties(workInProgress);
+      return null;
+    }
+    case SuspenseComponent: {
+      const nextState: SuspenseState | null = workInProgress.memoizedState;
+
+      popSuspenseHandler(workInProgress);
+
+      if ((workInProgress.flags & DidCapture) !== NoFlags) {
+        workInProgress.lanes = renderLanes;
+        return workInProgress;
+      }
+
+      const nextDidTimeout = nextState !== null;
+      const prevDidTimeout = current !== null && current.memoizedState !== null;
+
+      if (nextDidTimeout !== prevDidTimeout) {
+        if (nextDidTimeout) {
+          const offscreenFiber = workInProgress.child!;
+          offscreenFiber.flags |= Visibility;
+        }
+      }
+
+      const retryQueue: RetryQueue | null = workInProgress.updateQueue;
+      scheduleRetryEffect(workInProgress, retryQueue);
+
+      bubbleProperties(workInProgress);
+
       return null;
     }
     case ContextProvider: {
@@ -293,6 +325,24 @@ function appendAllChildren(parent: Instance, workInProgress: Fiber) {
 
       node.sibling.return = node.return;
       node = node.sibling;
+    }
+  }
+}
+
+function scheduleRetryEffect(
+  workInProgress: Fiber,
+  retryQueue: RetryQueue | null
+) {
+  const wakeables = retryQueue;
+  if (wakeables !== null) {
+    workInProgress.flags |= Update;
+  } else {
+    if (workInProgress.flags & ScheduleRetry) {
+      const retryLane =
+        workInProgress.tag !== OffscreenComponent
+          ? claimNextRetryLane()
+          : OffscreenLane;
+      workInProgress.lanes = mergeLanes(workInProgress.lanes, retryLane);
     }
   }
 }
