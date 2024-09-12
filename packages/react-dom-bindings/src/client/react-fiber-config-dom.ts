@@ -44,6 +44,8 @@ export const scheduleMicrotask = queueMicrotask;
  */
 export const isPrimaryRenderer = true;
 
+let currentPopstateTransitionEvent: Event | null = null;
+
 /**
  * 创建文本节点
  * @param text
@@ -232,4 +234,19 @@ export function unhideInstance(instance: Instance, props: Props): void {
     display === null || typeof display === "boolean"
       ? ""
       : ("" + display).trim();
+}
+
+export function shouldAttemptEagerTransition(): boolean {
+  const event = window.event;
+  if (event && event.type === "popstate") {
+    if (event === currentPopstateTransitionEvent) {
+      return false;
+    } else {
+      currentPopstateTransitionEvent = event;
+      return true;
+    }
+  }
+  // 没在 popstate 中
+  currentPopstateTransitionEvent = null;
+  return false;
 }

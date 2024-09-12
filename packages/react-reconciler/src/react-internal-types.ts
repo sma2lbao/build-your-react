@@ -4,7 +4,12 @@ import { Lane, Lanes } from "./react-fiber-lane";
 import { RootTag } from "./react-root-tags";
 import { WorkTag } from "./react-work-tags";
 import { TypeOfMode } from "./react-type-of-mode";
-import { ReactContext, RefObject, Wakeable } from "shared/react-types";
+import {
+  ReactContext,
+  RefObject,
+  StartTransitionOptions,
+  Wakeable,
+} from "shared/react-types";
 
 export interface Fiber {
   /**
@@ -192,6 +197,10 @@ export type Dispatcher = {
   useMemo<T>(create: () => T, deps: Array<any> | void | null): T;
   useCallback<T>(callback: T, deps: Array<any> | void | null): T;
   useContext<T>(context: ReactContext<T>): T;
+  useTransition(): [
+    boolean,
+    (callback: () => void, options?: StartTransitionOptions) => void
+  ];
 };
 
 export type ContextDependency<T> = {

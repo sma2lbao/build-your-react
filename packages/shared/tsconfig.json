@@ -25,6 +25,9 @@
       "react": [
         "../react/src/index.ts"
       ],
+      "react/*": [
+        "../react/src/*"
+      ],
       "react-dom": [
         "../react-dom/src/index.ts"
       ]

@@ -4,10 +4,15 @@ import {
   enqueueConcurrentHookUpdateAndEagerlyBailout,
 } from "./react-fiber-concurrent-updates";
 import {
+  setCurrentUpdatePriority,
+  getCurrentUpdatePriority,
+} from "react-fiber-config";
+import {
   Lane,
   Lanes,
   NoLane,
   NoLanes,
+  OffscreenLane,
   includesOnlyNonUrgentLanes,
   isSubsetOfLanes,
   mergeLanes,
@@ -16,6 +21,7 @@ import {
 import { ThenableState } from "./react-fiber-thenable";
 import {
   getWorkInProgressRoot,
+  getWorkInProgressRootRenderLanes,
   markSkippedUpdateLanes,
   requestDeferredLane,
   requestUpdateLane,
@@ -35,6 +41,12 @@ import {
   HasEffect as HookHasEffect,
 } from "./react-hook-effect-tags";
 import { readContext } from "./react-fiber-new-context";
+import { StartTransitionOptions } from "shared/react-types";
+import {
+  ContinuousEventPriority,
+  higherEventPriority,
+} from "./react-event-priorities";
+import { BatchConfigTransition } from "./react-fiber-tracing-marker-component";
 
 type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
@@ -139,6 +151,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useId: mountId,
   useReducer: mountReducer,
   useContext: readContext,
+  useTransition: mountTransition,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -154,6 +167,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useId: updateId,
   useReducer: updateReducer,
   useContext: readContext,
+  useTransition: updateTransition,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -169,6 +183,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useId: updateId,
   useReducer: rerenderReducer,
   useContext: readContext,
+  useTransition: rerenderTransition,
 };
 
 const ContextOnlyDispatcher: Dispatcher = {
@@ -184,6 +199,7 @@ const ContextOnlyDispatcher: Dispatcher = {
   useId: throwInvalidHookError,
   useReducer: throwInvalidHookError,
   useContext: throwInvalidHookError,
+  useTransition: throwInvalidHookError,
 };
 
 /**
@@ -273,6 +289,8 @@ function dispatchSetState<S, A>(
     const root = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
     if (root !== null) {
       scheduleUpdateOnFiber(root, fiber, lane);
+      // 针对Transition处理
+      entangleTransitionUpdate(root, queue, lane);
     }
   }
 }
@@ -607,17 +625,98 @@ function updateReducerImpl<S, A>(
     let didReadFromEntangledAsyncAction = false;
 
     do {
-      const updateLane = update.lane;
+      const updateLane = removeLanes(update.lane, OffscreenLane);
+      const isHiddenUpdate = updateLane !== update.lane;
+      // 是否需要跳过这次更新，（优先级比较）
+      const shouldSkipUpdate = isHiddenUpdate
+        ? !isSubsetOfLanes(getWorkInProgressRootRenderLanes(), updateLane)
+        : !isSubsetOfLanes(renderLanes, updateLane);
 
-      // TODO
-      const revertLane = update.revertLane;
+      if (shouldSkipUpdate) {
+        // 优先级不足
+        const clone = {
+          lane: updateLane,
+          revertLane: update.revertLane,
+          action: update.action,
+          hasEagerState: update.hasEagerState,
+          eagerState: update.eagerState,
+          next: null as any,
+        } as Update<S, A>;
 
-      // 处理更新
-      const action = update.action;
-      if (update.hasEagerState) {
-        newState = update.eagerState;
+        if (newBaseQueueFirst === null) {
+          newBaseQueueFirst = newBaseQueueLast = clone;
+          newBaseState = newState;
+        } else {
+          newBaseQueueLast = (newBaseQueueLast!.next as Update<S, A>) = clone;
+        }
+        currentlyRenderingFiber!.lanes = mergeLanes(
+          currentlyRenderingFiber!.lanes,
+          update.lane
+        );
+        markSkippedUpdateLanes(updateLane);
       } else {
-        newState = reducer(newState, action);
+        // 有足够的优先级
+        const revertLane = update.revertLane;
+        if (revertLane === NoLane) {
+          //这不是一个乐观的更新，我们现在就要应用它。
+          //但是，如果先前的更新被跳过，我们需要将此更新保留在队列中，以便稍后重新基于它更新。
+          if (newBaseQueueLast !== null) {
+            const clone = {
+              // 这个更新将被提交，所以我们不想取消提交。
+              // 使用 NoLane 可以工作，因为 0 是所有位掩码的子集，所以上面的检查永远不会跳过它。
+              lane: NoLane,
+              revertLane: NoLane,
+              action: update.action,
+              hasEagerState: update.hasEagerState,
+              eagerState: update.eagerState,
+              next: null as any,
+            } as Update<S, A>;
+            newBaseQueueLast = (newBaseQueueLast.next as Update<S, A>) = clone;
+          }
+        } else {
+          if (isSubsetOfLanes(renderLanes, revertLane)) {
+            // 如果“revert”优先级足够，就不要应用更新。
+            update = update.next;
+            continue;
+          } else {
+            // 优先级不够， 应用更新，但将其留在队列中，以便在随后的呈现中恢复或重新基于它。
+            const clone = {
+              //一旦我们提交了一个乐观更新，我们不应该取消提交，
+              // 直到它所关联的转换已经完成(由revertLane表示)。
+              // 在这里使用NoLane是有效的，因为0是所有位掩码的子集，所以上面的检查永远不会跳过它。
+              lane: NoLane,
+              // 重用相同的revertLane，这样我们就知道什么时候转换完成了。
+              revertLane: update.revertLane,
+              action: update.action,
+              hasEagerState: update.hasEagerState,
+              eagerState: update.eagerState,
+              next: null as any,
+            } as Update<S, A>;
+
+            if (newBaseQueueLast === null) {
+              newBaseQueueFirst = newBaseQueueLast = clone;
+              newBaseState = newState;
+            } else {
+              newBaseQueueLast = (newBaseQueueLast.next as Update<S, A>) =
+                clone;
+            }
+
+            currentlyRenderingFiber!.lanes = mergeLanes(
+              currentlyRenderingFiber!.lanes,
+              revertLane
+            );
+
+            markSkippedUpdateLanes(revertLane);
+          }
+        }
+
+        // 处理更新
+        const action = update.action;
+        if (update.hasEagerState) {
+          newState = update.eagerState;
+        } else {
+          newState = reducer(newState, action);
+        }
       }
       update = update.next;
     } while (update !== null && update !== first);
@@ -644,7 +743,6 @@ function updateReducerImpl<S, A>(
   }
 
   const dispatch: Dispatch<A> = queue.dispatch;
-
   return [hook.memoizedState, dispatch];
 }
 
@@ -923,6 +1021,47 @@ function updateId(): string {
   return id;
 }
 
+function mountTransition(): [
+  boolean,
+  (callback: () => void, options?: StartTransitionOptions) => void
+] {
+  const stateHook = mountStateImpl(false);
+  const start = startTransition.bind(
+    null,
+    currentlyRenderingFiber!,
+    stateHook.queue,
+    true,
+    false
+  );
+  const hook = mountWorkInProgressHook();
+  hook.memoizedState = start;
+  return [false, start];
+}
+
+function updateTransition(): [
+  boolean,
+  (callback: () => void, options?: StartTransitionOptions) => void
+] {
+  debugger;
+  const [booleanOrThenable] = updateState(false);
+  const hook = updateWorkInProgressHook();
+  const start = hook.memoizedState;
+  const isPending = booleanOrThenable;
+
+  return [isPending, start];
+}
+
+function rerenderTransition(): [
+  boolean,
+  (callback: () => void, options?: StartTransitionOptions) => void
+] {
+  const [booleanOrThenable] = rerenderState(false);
+  const hook = updateWorkInProgressHook();
+  const start = hook.memoizedState;
+  const isPending = booleanOrThenable;
+  return [isPending, start];
+}
+
 /**
  *
  * @param state
@@ -1081,4 +1220,55 @@ function throwInvalidHookError(): any {
       "3. You might have more than one copy of React in the same app\n" +
       "See https://react.dev/link/invalid-hook-call for tips about how to debug and fix this problem."
   );
+}
+
+/**
+ *
+ * @param fiber 当前 fiber 节点
+ * @param queue
+ * @param pendingState
+ * @param finishedState
+ * @param callback
+ * @param options
+ */
+function startTransition<S>(
+  fiber: Fiber,
+  queue: UpdateQueue<S, BasicStateAction<S>>,
+  pendingState: S,
+  finishedState: S,
+  callback: () => any,
+  options?: StartTransitionOptions
+): void {
+  debugger;
+  const previousPriority = getCurrentUpdatePriority();
+  setCurrentUpdatePriority(
+    higherEventPriority(previousPriority, ContinuousEventPriority)
+  );
+
+  const prevTransition = ReactSharedInternals.T;
+  const currentTransition: BatchConfigTransition = {};
+
+  ReactSharedInternals.T = null;
+  // 以 ContinuousEventPriority 更新 pendingState 即 true;
+  dispatchSetState(fiber, queue, pendingState);
+  ReactSharedInternals.T = currentTransition;
+
+  try {
+    // 以 transition lane 更新 finishedState 和 callback 一起更新；
+    dispatchSetState(fiber, queue, finishedState);
+    callback();
+  } catch (error) {
+    throw error;
+  } finally {
+    setCurrentUpdatePriority(previousPriority);
+    ReactSharedInternals.T = prevTransition;
+  }
+}
+
+function entangleTransitionUpdate<S, A>(
+  root: FiberRoot,
+  queue: UpdateQueue<S, A>,
+  lane: Lane
+): void {
+  //
 }

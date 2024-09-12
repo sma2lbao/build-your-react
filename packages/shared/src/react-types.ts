@@ -65,3 +65,7 @@ export type OffscreenMode =
   | "unstable-defer-without-hiding"
   | "visible"
   | "manual";
+
+export type StartTransitionOptions = {
+  name?: string;
+};

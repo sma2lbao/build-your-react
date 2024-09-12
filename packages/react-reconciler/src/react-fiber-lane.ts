@@ -15,6 +15,7 @@ const NonIdleLanes: Lanes = 0b0000111111111111111111111111111;
  * 同步任务
  */
 export const SyncLane: Lane = 0b0000000000000000000000000000010;
+export const SyncLaneIndex = 1;
 
 /**
  * 连续输入任务-（如：文本框输入事件）
@@ -353,4 +354,11 @@ export function claimNextRetryLane(): Lane {
 
 export function laneToLanes(lane: Lane): Lanes {
   return lane;
+}
+
+export function upgradePendingLaneToSync(root: FiberRoot, lane: Lane) {
+  root.pendingLanes |= SyncLane;
+
+  root.entangledLanes |= SyncLane;
+  root.entanglements[SyncLaneIndex] |= lane;
 }

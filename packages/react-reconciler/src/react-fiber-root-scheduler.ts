@@ -1,13 +1,18 @@
-import { scheduleMicrotask } from "react-fiber-config";
+import {
+  scheduleMicrotask,
+  shouldAttemptEagerTransition,
+} from "react-fiber-config";
 import { FiberRoot } from "./react-internal-types";
 import {
   Lane,
   NoLane,
   NoLanes,
   SyncLane,
+  claimNextTransitionLane,
   getHighestPriorityLane,
   getNextLanes,
   includesSyncLane,
+  upgradePendingLaneToSync,
 } from "./react-fiber-lane";
 import {
   scheduleCallback as Scheduler_scheduleCallback,
@@ -37,6 +42,7 @@ import {
   IdleEventPriority,
   lanesToEventPriority,
 } from "./react-event-priorities";
+import { BatchConfigTransition } from "./react-fiber-tracing-marker-component";
 
 export type RenderTaskFn = (didTimeout: boolean) => RenderTaskFn | null;
 
@@ -56,6 +62,11 @@ let mightHavePendingSyncWork: boolean = false;
  * 执行同步中的标记
  */
 let isFlushingWork: boolean = false;
+
+/**
+ * startTransition 需要使用
+ */
+let currentEventTransitionLane: Lane = NoLane;
 
 /**
  * 调度FiberRoot。可能存在微任务
@@ -110,6 +121,16 @@ function processRootScheduleInMicrotask() {
   while (root !== null) {
     const next = root.next;
 
+    // startTransition 相关
+    if (
+      currentEventTransitionLane !== NoLane &&
+      shouldAttemptEagerTransition()
+    ) {
+      // 在事件期间安排了一个过渡，但我们将尝试同步呈现它。
+      // 我们在popstate事件期间这样做，以保留前一个页面的滚动位置。
+      upgradePendingLaneToSync(root, currentEventTransitionLane);
+    }
+
     const nextLanes = scheduleTaskForRootDuringMicrotask(root!, currentTime);
 
     if (nextLanes === NoLane) {
@@ -130,6 +151,8 @@ function processRootScheduleInMicrotask() {
     }
     root = next;
   }
+
+  currentEventTransitionLane = NoLane;
 
   // 在微任务结束时，清除所有挂起的同步工作。这必须在最后，因为它做实际的渲染工作，可能会抛出。
   // 离散事件等属于同步任务，优先级高啊
@@ -253,4 +276,15 @@ function cancelCallback(callbackNode: any) {
   if (callbackNode !== null) {
     Schedule_cancelCallback(callbackNode);
   }
+}
+
+export function requestTransitionLane(
+  transition: BatchConfigTransition | null
+): Lane {
+  // 对于同一事件中具有相同优先级的所有更新，为lane分配更新的算法应该是稳定的。
+  // 要做到这一点，算法的输入必须相同。
+  if (currentEventTransitionLane === NoLane) {
+    currentEventTransitionLane = claimNextTransitionLane();
+  }
+  return currentEventTransitionLane;
 }

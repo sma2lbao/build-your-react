@@ -56,6 +56,7 @@ import {
   RenderTaskFn,
   ensureRootIsScheduled,
   getContinuationForRoot,
+  requestTransitionLane,
 } from "./react-fiber-root-scheduler";
 import { isThenableResolved } from "./react-fiber-thenable";
 import { throwException } from "./react-fiber-throw";
@@ -78,6 +79,7 @@ import {
   getCurrentUpdatePriority,
 } from "react-fiber-config";
 import { SuspenseState } from "./react-fiber-suspense-component";
+import { requestCurrentTransition } from "./react-fiber-transition";
 
 type ExecutionContext = number;
 
@@ -876,6 +878,14 @@ export function getWorkInProgressRootRenderLanes(): Lanes {
 }
 
 export function requestUpdateLane(): Lane {
+  const transition = requestCurrentTransition();
+
+  if (transition !== null) {
+    // React.startTransition 入口
+    // const actionScopeLane = peekEntangledActionLane();
+    return requestTransitionLane(transition);
+  }
+
   return eventPriorityToLane(resolveUpdatePriority());
 }
 

@@ -83,3 +83,9 @@
 2024/09/10
 
 - 支持 Suspense 组件
+
+2024/09/12
+
+- 支持 startTransition API
+
+- 增加 useTransition HOOK

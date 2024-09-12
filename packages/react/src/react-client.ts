@@ -8,6 +8,7 @@ import { createElement } from "./jsx/react-jsx-element";
 import { memo } from "./react-memo";
 import { lazy } from "./react-lazy";
 import { createContext } from "./react-context";
+import { startTransition } from "./react-start-transition";
 import {
   useReducer,
   useState,
@@ -19,6 +20,7 @@ import {
   useDeferredValue,
   useId,
   useContext,
+  useTransition,
 } from "./react-hooks";
 import ReactSharedInternals from "./react-shared-internals-client";
 
@@ -27,6 +29,7 @@ export {
   lazy,
   createContext,
   createElement,
+  startTransition,
   useReducer,
   useState,
   useRef,
@@ -37,6 +40,7 @@ export {
   useDeferredValue,
   useId,
   useContext,
+  useTransition,
   REACT_FRAGMENT_TYPE as Fragment,
   REACT_OFFSCREEN_TYPE as unstable_Activity,
   REACT_SUSPENSE_TYPE as Suspense,
