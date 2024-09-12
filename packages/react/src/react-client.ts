@@ -21,6 +21,7 @@ import {
   useId,
   useContext,
   useTransition,
+  useSyncExternalStore,
 } from "./react-hooks";
 import ReactSharedInternals from "./react-shared-internals-client";
 
@@ -41,6 +42,7 @@ export {
   useId,
   useContext,
   useTransition,
+  useSyncExternalStore,
   REACT_FRAGMENT_TYPE as Fragment,
   REACT_OFFSCREEN_TYPE as unstable_Activity,
   REACT_SUSPENSE_TYPE as Suspense,

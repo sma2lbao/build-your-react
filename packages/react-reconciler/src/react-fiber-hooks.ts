@@ -2,6 +2,7 @@ import { markWorkInProgressReceivedUpdate } from "./react-fiber-begin-work";
 import {
   enqueueConcurrentHookUpdate,
   enqueueConcurrentHookUpdateAndEagerlyBailout,
+  enqueueConcurrentRenderForLane,
 } from "./react-fiber-concurrent-updates";
 import {
   setCurrentUpdatePriority,
@@ -13,6 +14,8 @@ import {
   NoLane,
   NoLanes,
   OffscreenLane,
+  SyncLane,
+  includesBlockingLane,
   includesOnlyNonUrgentLanes,
   isSubsetOfLanes,
   mergeLanes,
@@ -32,6 +35,7 @@ import ReactSharedInternals from "shared/react-shared-internals";
 import {
   Flags,
   Passive as PassiveEffect,
+  StoreConsistency,
   Update as UpdateEffect,
 } from "./react-fiber-flags";
 import {
@@ -74,6 +78,11 @@ export type Hook = {
   baseQueue: Update<any, any> | null;
   queue: any;
   next: Hook | null;
+};
+
+type StoreInstance<T> = {
+  value: T;
+  getSnapshot: () => T;
 };
 
 type EffectInstance = {
@@ -152,6 +161,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useReducer: mountReducer,
   useContext: readContext,
   useTransition: mountTransition,
+  useSyncExternalStore: mountSyncExternalStore,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -168,6 +178,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useReducer: updateReducer,
   useContext: readContext,
   useTransition: updateTransition,
+  useSyncExternalStore: updateSyncExternalStore,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -184,6 +195,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useReducer: rerenderReducer,
   useContext: readContext,
   useTransition: rerenderTransition,
+  useSyncExternalStore: updateSyncExternalStore,
 };
 
 const ContextOnlyDispatcher: Dispatcher = {
@@ -200,6 +212,7 @@ const ContextOnlyDispatcher: Dispatcher = {
   useReducer: throwInvalidHookError,
   useContext: throwInvalidHookError,
   useTransition: throwInvalidHookError,
+  useSyncExternalStore: updateSyncExternalStore,
 };
 
 /**
@@ -1060,6 +1073,183 @@ function rerenderTransition(): [
   const start = hook.memoizedState;
   const isPending = booleanOrThenable;
   return [isPending, start];
+}
+
+function mountSyncExternalStore<T>(
+  subscribe: (fn: () => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T
+): T {
+  const fiber = currentlyRenderingFiber!;
+  const hook = mountWorkInProgressHook();
+
+  const nextSnapshot = getSnapshot();
+  const root = getWorkInProgressRoot();
+  if (root === null) {
+    throw new Error(
+      "Expected a work-in-progress root. This is a bug in React. Please file an issue."
+    );
+  }
+  const rootRenderLanes = getWorkInProgressRootRenderLanes();
+  if (!includesBlockingLane(root, rootRenderLanes)) {
+    // 当前更新没有 DefaultLane 和 InputContinuousLane
+    pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
+  }
+
+  // 每次 渲染（render）都执行getSnapshot();
+  hook.memoizedState = nextSnapshot;
+  const inst: StoreInstance<T> = {
+    value: nextSnapshot,
+    getSnapshot,
+  };
+
+  hook.queue = inst;
+
+  // 用 effect 来订阅
+  mountEffect(subscribeToStore.bind(null, fiber, inst, subscribe));
+
+  // 调度一个 effect 来更新可变实例字段。
+  // 每当 subscribe、getSnapshot 或 值发生变化时，我们都会更新它。
+  // 因为没有清理函数，而且我们可以正确地跟踪 deps，所以我们可以直接调用pusheeffect，
+  // 而不需要存储任何额外的 state。出于同样的原因，我们也不需要设置 static flag。
+  fiber.flags |= PassiveEffect;
+  pushEffect(
+    HookHasEffect | HookPassive,
+    updateStoreInstance.bind(null, fiber, inst, nextSnapshot, getSnapshot),
+    createEffectInstance(),
+    null
+  );
+
+  return nextSnapshot;
+}
+
+function updateSyncExternalStore<T>(
+  subscribe: (fn: () => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T
+): T {
+  const fiber = currentlyRenderingFiber!;
+  const hook = updateWorkInProgressHook();
+
+  const nextSnapshot = getSnapshot();
+
+  const prevSnapshot = (currentHook || hook).memoizedState;
+  const snapshotChanged = !Object.is(prevSnapshot, nextSnapshot);
+  if (snapshotChanged) {
+    hook.memoizedState = nextSnapshot;
+    markWorkInProgressReceivedUpdate();
+  }
+  const inst = hook.queue;
+
+  updateEffect(subscribeToStore.bind(null, fiber, inst, subscribe), [
+    subscribe,
+  ]);
+
+  if (
+    inst.getSnapshot !== getSnapshot ||
+    snapshotChanged ||
+    (workInProgressHook !== null &&
+      workInProgressHook.memoizedState.tag & HookHasEffect)
+  ) {
+    fiber.flags |= PassiveEffect;
+    pushEffect(
+      HookHasEffect | HookPassive,
+      updateStoreInstance.bind(null, fiber, inst, nextSnapshot, getSnapshot),
+      createEffectInstance(),
+      null
+    );
+
+    const root: FiberRoot | null = getWorkInProgressRoot();
+
+    if (root === null) {
+      throw new Error(
+        "Expected a work-in-progress root. This is a bug in React. Please file an issue."
+      );
+    }
+    if (!includesBlockingLane(root, renderLanes)) {
+      pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
+    }
+  }
+
+  return nextSnapshot;
+}
+
+function pushStoreConsistencyCheck<T>(
+  fiber: Fiber,
+  getSnapshot: () => T,
+  renderedSnapshot: T
+): void {
+  fiber.flags |= StoreConsistency;
+  const check: StoreConsistencyCheck<T> = {
+    getSnapshot,
+    value: renderedSnapshot,
+  };
+
+  let componentUpdateQueue: FunctionComponentUpdateQueue | null =
+    currentlyRenderingFiber!.updateQueue;
+  if (componentUpdateQueue === null) {
+    componentUpdateQueue = createFunctionComponentUpdateQueue();
+    currentlyRenderingFiber!.updateQueue = componentUpdateQueue;
+    componentUpdateQueue.stores = [check];
+  } else {
+    const stores = componentUpdateQueue.stores;
+    if (stores === null) {
+      componentUpdateQueue.stores = [check];
+    } else {
+      stores.push(check);
+    }
+  }
+}
+
+function subscribeToStore<T>(
+  fiber: Fiber,
+  inst: StoreInstance<T>,
+  subscribe: (fn: () => void) => () => void
+): any {
+  const handleStoreChange = () => {
+    // 存储改变。检查自上次从存储读取数据以来快照是否发生了更改。
+    if (checkIfSnapshotChanged(inst)) {
+      forceStoreRerender(fiber);
+    }
+  };
+  // 订阅并返回一个清理函数。
+  return subscribe(handleStoreChange);
+}
+
+function updateStoreInstance<T>(
+  fiber: Fiber,
+  inst: StoreInstance<T>,
+  nextSnapshot: T,
+  getSnapshot: () => T
+): void {
+  inst.value = nextSnapshot;
+  inst.getSnapshot = getSnapshot;
+
+  if (checkIfSnapshotChanged(inst)) {
+    forceStoreRerender(fiber);
+  }
+}
+
+function checkIfSnapshotChanged<T>(inst: StoreInstance<T>): boolean {
+  const latestGetSnapshot = inst.getSnapshot;
+  const prevValue = inst.value;
+  try {
+    const nextValue = latestGetSnapshot();
+    return !Object.is(prevValue, nextValue);
+  } catch (error) {
+    return true;
+  }
+}
+
+/**
+ * 强制以 SyncLane 通道更新
+ * @param fiber
+ */
+function forceStoreRerender(fiber: Fiber) {
+  const root = enqueueConcurrentRenderForLane(fiber, SyncLane);
+  if (root !== null) {
+    scheduleUpdateOnFiber(root, fiber, SyncLane);
+  }
 }
 
 /**

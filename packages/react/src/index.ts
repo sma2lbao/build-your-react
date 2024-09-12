@@ -15,6 +15,7 @@ export {
   useId,
   useContext,
   useTransition,
+  useSyncExternalStore,
   Fragment,
   Suspense,
   unstable_Activity,

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 // import App from "./use-reducer-app";
 // import App from "./use-context-app";
 // import App from "./activity-app";
-import App from "./use-transition-app";
+// import App from "./use-transition-app";
+import App from "./use-sync-external-store";
 
 createRoot(document.getElementById("root")!).render(<App />);

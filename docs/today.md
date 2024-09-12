@@ -89,3 +89,5 @@
 - 支持 startTransition API
 
 - 增加 useTransition HOOK
+
+- 增加 useSyncExternalStore Hook

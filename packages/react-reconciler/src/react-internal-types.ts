@@ -201,6 +201,11 @@ export type Dispatcher = {
     boolean,
     (callback: () => void, options?: StartTransitionOptions) => void
   ];
+  useSyncExternalStore<T>(
+    subscribe: (fn: () => void) => () => void,
+    getSnapshot: () => T,
+    getServerSnapshot?: () => T
+  ): T;
 };
 
 export type ContextDependency<T> = {

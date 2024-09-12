@@ -62,6 +62,11 @@ export const IdleLane: Lane = 0b0010000000000000000000000000000;
  */
 export const OffscreenLane: Lane = 0b0100000000000000000000000000000;
 
+/**
+ * 延迟优先级
+ */
+export const DeferredLane: Lane = 0b1000000000000000000000000000000;
+
 let nextTransitionLane: Lane = TransitionLane1;
 let nextRetryLane: Lane = RetryLane1;
 
@@ -256,6 +261,12 @@ export function includesExpiredLane(root: FiberRoot, lanes: Lanes): boolean {
   return (lanes & root.expiredLanes) !== NoLanes;
 }
 
+/**
+ * 是否存在阻塞通道 （即同步通道 InputContinuousLane与 DefaultLane）
+ * @param root
+ * @param lanes
+ * @returns
+ */
 export function includesBlockingLane(root: FiberRoot, lanes: Lanes): boolean {
   const SyncDefaultLanes = InputContinuousLane | DefaultLane;
 
@@ -317,10 +328,38 @@ function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {
   switch (getHighestPriorityLane(lanes)) {
     case SyncLane:
       return SyncLane;
-    case IdleLane:
-      return IdleLane;
+    case InputContinuousLane:
+      return InputContinuousLane;
     case DefaultLane:
       return DefaultLane;
+    case TransitionLane1:
+    case TransitionLane2:
+    case TransitionLane3:
+    case TransitionLane4:
+    case TransitionLane5:
+    case TransitionLane6:
+    case TransitionLane7:
+    case TransitionLane8:
+    case TransitionLane9:
+    case TransitionLane10:
+    case TransitionLane11:
+    case TransitionLane12:
+    case TransitionLane13:
+    case TransitionLane14:
+    case TransitionLane15:
+      return lanes & TransitionLanes;
+    case RetryLane1:
+    case RetryLane2:
+    case RetryLane3:
+    case RetryLane4:
+      return lanes & RetryLanes;
+    case IdleLane:
+      return IdleLane;
+    case OffscreenLane:
+      return OffscreenLane;
+    case DeferredLane:
+      // 不可能触发，因为延迟的工作总是和其他通道缠在一起调度更新。
+      return NoLanes;
     default:
       return lanes;
   }
