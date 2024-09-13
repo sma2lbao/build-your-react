@@ -1060,7 +1060,6 @@ function updateTransition(): [
   boolean,
   (callback: () => void, options?: StartTransitionOptions) => void
 ] {
-  debugger;
   const [booleanOrThenable] = updateState(false);
   const hook = updateWorkInProgressHook();
   const start = hook.memoizedState;
@@ -1483,7 +1482,6 @@ function startTransition<S>(
   callback: () => any,
   options?: StartTransitionOptions
 ): void {
-  debugger;
   const previousPriority = getCurrentUpdatePriority();
   setCurrentUpdatePriority(
     higherEventPriority(previousPriority, ContinuousEventPriority)

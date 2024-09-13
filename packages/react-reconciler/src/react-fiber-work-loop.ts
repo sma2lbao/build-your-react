@@ -986,7 +986,6 @@ export function renderDidSuspend() {
  * @param wakeable
  */
 export function resolveRetryWakeable(boundaryFiber: Fiber, wakeable: Wakeable) {
-  debugger;
   let retryLane: Lane = NoLane;
   let retryCache: WeakSet<Wakeable> | null;
   switch (boundaryFiber.tag) {
