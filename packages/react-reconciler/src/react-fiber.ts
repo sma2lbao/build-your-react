@@ -1,6 +1,7 @@
 import {
   REACT_CONSUMER_TYPE,
   REACT_CONTEXT_TYPE,
+  REACT_FORWARD_REF_TYPE,
   REACT_FRAGMENT_TYPE,
   REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
@@ -19,6 +20,7 @@ import {
 import {
   ContextConsumer,
   ContextProvider,
+  ForwardRef,
   Fragment,
   FunctionComponent,
   HostComponent,
@@ -163,6 +165,9 @@ export function createFiberFromTypeAndProps(
             case REACT_LAZY_TYPE:
               fiberTag = LazyComponent;
               resolvedType = null;
+              break getTag;
+            case REACT_FORWARD_REF_TYPE:
+              fiberTag = ForwardRef;
               break getTag;
           }
         }

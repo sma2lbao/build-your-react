@@ -19,6 +19,7 @@ import { Fiber, FiberRoot } from "./react-internal-types";
 import {
   ContextConsumer,
   ContextProvider,
+  ForwardRef,
   Fragment,
   FunctionComponent,
   HostComponent,
@@ -88,6 +89,7 @@ import {
   pushPrimaryTreeSuspenseHandler,
   suspenseStackCursor,
 } from "./react-fiber-suspense-context";
+import { REACT_FORWARD_REF_TYPE, REACT_MEMO_TYPE } from "shared/react-symbols";
 
 let didReceiveUpdate: boolean = false;
 
@@ -182,6 +184,17 @@ export function beginWork(
         workInProgress,
         Component,
         unresolvedProps,
+        renderLanes
+      );
+    }
+    case ForwardRef: {
+      const type = workInProgress.type;
+      const resolvedProps = workInProgress.pendingProps;
+      return updateForwardRef(
+        current,
+        workInProgress,
+        type,
+        resolvedProps,
         renderLanes
       );
     }
@@ -781,6 +794,45 @@ function updateOffscreenComponent(
   return workInProgress.child;
 }
 
+function updateForwardRef(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+) {
+  const render = Component.render;
+  const ref = workInProgress.ref;
+  let propsWithoutRef: Record<string, any>;
+  if ("ref" in nextProps) {
+    propsWithoutRef = {};
+    for (const key in nextProps) {
+      if (key !== "ref") {
+        propsWithoutRef[key] = nextProps[key];
+      }
+    }
+  } else {
+    propsWithoutRef = nextProps;
+  }
+
+  const nextChildren = renderWithHooks(
+    current,
+    workInProgress,
+    render,
+    propsWithoutRef,
+    ref,
+    renderLanes
+  );
+
+  if (current !== null && !didReceiveUpdate) {
+    bailoutHooks(current, workInProgress, renderLanes);
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+  }
+
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
+}
+
 function deferHiddenOffscreenComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -838,6 +890,29 @@ function mountLazyComponent(
       props,
       renderLanes
     );
+  } else if (Component !== undefined && Component !== null) {
+    const $$typeof = Component.$$typeof;
+    if ($$typeof === REACT_FORWARD_REF_TYPE) {
+      const resolvedProps = props;
+      workInProgress.tag = ForwardRef;
+      return updateForwardRef(
+        null,
+        workInProgress,
+        Component,
+        resolvedProps,
+        renderLanes
+      );
+    } else if ($$typeof === REACT_MEMO_TYPE) {
+      const resolvedProps = props;
+      workInProgress.tag = MemoComponent;
+      return updateMemoComponent(
+        null,
+        workInProgress,
+        Component,
+        resolvedProps,
+        renderLanes
+      );
+    }
   }
   throw new Error(
     `Element type is invalid. Received a promise that resolves to: ${Component}. ` +

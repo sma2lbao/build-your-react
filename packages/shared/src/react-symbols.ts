@@ -16,6 +16,8 @@ export const REACT_LAZY_TYPE = Symbol.for("react.lazy");
 
 export const REACT_SUSPENSE_TYPE = Symbol.for("react.suspense");
 
+export const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+
 const MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
 const FAUX_ITERATOR_SYMBOL = "@@iterator";
 

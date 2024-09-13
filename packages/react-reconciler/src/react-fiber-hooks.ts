@@ -37,6 +37,7 @@ import {
   Passive as PassiveEffect,
   StoreConsistency,
   Update as UpdateEffect,
+  LayoutStatic as LayoutStaticEffect,
 } from "./react-fiber-flags";
 import {
   HookFlags,
@@ -162,6 +163,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useContext: readContext,
   useTransition: mountTransition,
   useSyncExternalStore: mountSyncExternalStore,
+  useImperativeHandle: mountImperativeHandle,
 };
 
 const HooksDispatcherOnUpdate: Dispatcher = {
@@ -179,6 +181,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useContext: readContext,
   useTransition: updateTransition,
   useSyncExternalStore: updateSyncExternalStore,
+  useImperativeHandle: updateImperativeHandle,
 };
 
 const HooksDispatcherOnRerender: Dispatcher = {
@@ -196,6 +199,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useContext: readContext,
   useTransition: rerenderTransition,
   useSyncExternalStore: updateSyncExternalStore,
+  useImperativeHandle: updateImperativeHandle,
 };
 
 const ContextOnlyDispatcher: Dispatcher = {
@@ -212,7 +216,8 @@ const ContextOnlyDispatcher: Dispatcher = {
   useReducer: throwInvalidHookError,
   useContext: throwInvalidHookError,
   useTransition: throwInvalidHookError,
-  useSyncExternalStore: updateSyncExternalStore,
+  useSyncExternalStore: throwInvalidHookError,
+  useImperativeHandle: throwInvalidHookError,
 };
 
 /**
@@ -1172,6 +1177,55 @@ function updateSyncExternalStore<T>(
   }
 
   return nextSnapshot;
+}
+
+function mountImperativeHandle<T>(
+  ref: { current: T | null } | ((inst: T | null) => any) | null | void,
+  create: () => T,
+  deps: Array<any> | void | null
+): void {
+  const effectDeps =
+    deps !== null && deps !== undefined ? deps.concat([ref]) : null;
+
+  const fiberFlags: Flags = UpdateEffect | LayoutStaticEffect;
+  mountEffectImpl(
+    fiberFlags,
+    HookLayout,
+    imperativeHandleEffect.bind(null, create, ref as any),
+    effectDeps
+  );
+}
+
+function updateImperativeHandle<T>(
+  ref: { current: T | null } | ((inst: T | null) => any) | null | void,
+  create: () => T,
+  deps: Array<any> | void | null
+): void {
+  const effectDeps =
+    deps !== null && deps !== undefined ? deps.concat([ref]) : null;
+
+  updateEffectImpl(
+    UpdateEffect,
+    HookLayout,
+    imperativeHandleEffect.bind(null, create, ref as any),
+    effectDeps
+  );
+}
+
+function imperativeHandleEffect<T>(
+  create: () => T,
+  ref: { current: T | null } | ((inst: T | null) => any) | null | void
+): void | (() => void) {
+  if (typeof ref === "function") {
+    throw new Error(`ref is function`);
+  } else if (ref !== null && ref !== undefined) {
+    const refObject = ref;
+    const inst = create();
+    refObject.current = inst;
+    return () => {
+      refObject.current = null;
+    };
+  }
 }
 
 function pushStoreConsistencyCheck<T>(

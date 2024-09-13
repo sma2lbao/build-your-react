@@ -206,6 +206,11 @@ export type Dispatcher = {
     getSnapshot: () => T,
     getServerSnapshot?: () => T
   ): T;
+  useImperativeHandle<T>(
+    ref: { current: T | null } | ((inst: T | null) => any) | null | void,
+    create: () => T,
+    deps: Array<any> | void | null
+  ): void;
 };
 
 export type ContextDependency<T> = {

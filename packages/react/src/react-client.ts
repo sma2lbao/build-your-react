@@ -9,6 +9,7 @@ import { memo } from "./react-memo";
 import { lazy } from "./react-lazy";
 import { createContext } from "./react-context";
 import { startTransition } from "./react-start-transition";
+import { forwardRef } from "./react-forward-ref";
 import {
   useReducer,
   useState,
@@ -22,6 +23,7 @@ import {
   useContext,
   useTransition,
   useSyncExternalStore,
+  useImperativeHandle,
 } from "./react-hooks";
 import ReactSharedInternals from "./react-shared-internals-client";
 
@@ -31,6 +33,7 @@ export {
   createContext,
   createElement,
   startTransition,
+  forwardRef,
   useReducer,
   useState,
   useRef,
@@ -43,6 +46,7 @@ export {
   useContext,
   useTransition,
   useSyncExternalStore,
+  useImperativeHandle,
   REACT_FRAGMENT_TYPE as Fragment,
   REACT_OFFSCREEN_TYPE as unstable_Activity,
   REACT_SUSPENSE_TYPE as Suspense,

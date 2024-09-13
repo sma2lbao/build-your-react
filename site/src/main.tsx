@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 // import App from "./use-context-app";
 // import App from "./activity-app";
 // import App from "./use-transition-app";
-import App from "./use-sync-external-store";
+// import App from "./use-sync-external-store";
+// import App from "./forward-ref-app";
+import App from "./use-imperative-handle-app";
 
 createRoot(document.getElementById("root")!).render(<App />);

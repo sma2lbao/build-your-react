@@ -34,6 +34,7 @@ import {
 import { Lanes, SyncLane } from "./react-fiber-lane";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
+  ForwardRef,
   FunctionComponent,
   HostComponent,
   HostRoot,
@@ -121,6 +122,7 @@ function commitMutationEffectsOnFiber(
       commitReconciliationEffects(finishedWork);
       return;
     }
+    case ForwardRef:
     case MemoComponent:
     case SimpleMemoComponent:
     case FunctionComponent: {
@@ -409,6 +411,7 @@ function commitLayoutEffectOnFiber(
       );
       break;
     }
+    case ForwardRef:
     case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraverseLayoutEffects(
@@ -667,6 +670,7 @@ export function commitPassiveUnmountEffects(finishedWork: Fiber): void {
 
 function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
   switch (finishedWork.tag) {
+    case ForwardRef:
     case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraversePassiveUnmountEffects(finishedWork);
@@ -756,6 +760,7 @@ function commitPassiveMountOnFiber(
 ): void {
   const flags = finishedWork.flags;
   switch (finishedWork.tag) {
+    case ForwardRef:
     case SimpleMemoComponent:
     case FunctionComponent: {
       recursivelyTraversePassiveMountEffects(
@@ -860,6 +865,7 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
 ): void {
   switch (current.tag) {
     case SimpleMemoComponent:
+    case ForwardRef:
     case FunctionComponent: {
       commitHookPassiveUnmountEffects(
         current,
@@ -983,6 +989,7 @@ export function reconnectPassiveEffects(
 ) {
   const flags = finishedWork.flags;
   switch (finishedWork.tag) {
+    case ForwardRef:
     case FunctionComponent:
     case SimpleMemoComponent: {
       recursivelyTraverseReconnectPassiveEffects(
@@ -1041,6 +1048,7 @@ export function reconnectPassiveEffects(
 export function disconnectPassiveEffect(finishedWork: Fiber): void {
   switch (finishedWork.tag) {
     case FunctionComponent:
+    case ForwardRef:
     case SimpleMemoComponent: {
       commitHookPassiveUnmountEffects(
         finishedWork,
@@ -1343,6 +1351,7 @@ function commitDeletionEffectsOnFiber(
       }
       return;
     }
+    case ForwardRef:
     case MemoComponent:
     case SimpleMemoComponent:
     case FunctionComponent: {
@@ -1547,6 +1556,7 @@ export function attachOffscreenInstance(instance: OffscreenInstance): void {
 
 export function disappearLayoutEffects(finishedWork: Fiber) {
   switch (finishedWork.tag) {
+    case ForwardRef:
     case FunctionComponent:
     case MemoComponent:
     case SimpleMemoComponent: {

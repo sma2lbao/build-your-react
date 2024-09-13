@@ -91,6 +91,15 @@ export function useSyncExternalStore<T>(
   );
 }
 
+export function useImperativeHandle<T>(
+  ref: { current: T | null } | ((inst: T | null) => any) | null | void,
+  create: () => T,
+  deps: Array<any> | void | null
+): void {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useImperativeHandle(ref, create, deps);
+}
+
 function resolveDispatcher() {
   const dispatcher = ReactSharedInternals.H;
 

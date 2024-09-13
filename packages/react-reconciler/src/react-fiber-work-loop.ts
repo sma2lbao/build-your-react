@@ -63,6 +63,7 @@ import { throwException } from "./react-fiber-throw";
 import { unwindInterruptedWork, unwindWork } from "./react-fiber-unwind-work";
 import { Fiber, FiberRoot } from "./react-internal-types";
 import {
+  ForwardRef,
   FunctionComponent,
   HostComponent,
   SuspenseComponent,
@@ -534,6 +535,19 @@ function replayBeginWork(unitOfWork: Fiber): null | Fiber {
         Component,
         workInProgressRootRenderLanes
       );
+      break;
+    }
+    case ForwardRef: {
+      const Component = unitOfWork.type.render;
+      const resolvedProps = unitOfWork.pendingProps;
+      next = replayFunctionComponent(
+        current,
+        unitOfWork,
+        resolvedProps,
+        Component,
+        workInProgressRootRenderLanes
+      );
+      break;
     }
     case HostComponent: {
       resetHooksOnUnwind(unitOfWork);

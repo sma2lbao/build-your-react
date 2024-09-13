@@ -20,6 +20,7 @@ import { Fiber, FiberRoot } from "./react-internal-types";
 import {
   ContextConsumer,
   ContextProvider,
+  ForwardRef,
   Fragment,
   FunctionComponent,
   HostComponent,
@@ -74,6 +75,7 @@ export function completeWork(
       return null;
     }
     case LazyComponent:
+    case ForwardRef:
     case Fragment:
     case ContextConsumer:
     case MemoComponent:

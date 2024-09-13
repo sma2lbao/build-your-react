@@ -10,6 +10,7 @@ export type WorkTag =
   | typeof Fragment
   | typeof ContextConsumer
   | typeof ContextProvider
+  | typeof ForwardRef
   | typeof SuspenseComponent
   | typeof MemoComponent
   | typeof SimpleMemoComponent
@@ -46,6 +47,11 @@ export const Fragment = 7;
 export const ContextConsumer = 9;
 
 export const ContextProvider = 10;
+
+/**
+ * React.forwardRef 包裹标识
+ */
+export const ForwardRef = 11;
 
 /**
  * Suspense 组件标识
