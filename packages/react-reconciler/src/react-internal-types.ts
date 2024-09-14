@@ -23,7 +23,9 @@ export interface Fiber {
   key: null | string;
 
   /**
-   * 元素的值类型，用于在这个孩子的和解期间保持身份。
+   * 元素的值类型（比如 Fragment 组件的 elementType为 REACT_FRAGMENT_TYPE ）。
+   *  Offscreen 的 REACT_OFFSCREEN_TYPE
+   * React.lazy 的 elementType 为 { $$typeof: REACT_LAZY_TYPE }
    */
   elementType: any;
 
@@ -59,16 +61,23 @@ export interface Fiber {
 
   ref: null | RefObject;
 
+  /**
+   * 要更新的prop
+   */
   pendingProps: any;
+  /**
+   * 当前prop
+   */
   memoizedProps: any;
-
   /**
    * 更新队列
    */
   updateQueue: any;
 
   /**
+   * 一般用来缓存当前 fiber的内部值，不同类型的fiber缓存不同类型的值
    * FunctionComponent 组件指向 第一个 HOOK
+   * OffscreenComponent 存储 baseLane
    */
   memoizedState: any;
 
@@ -159,12 +168,18 @@ interface BaseFiberRootProperties {
    */
   suspendedLanes: Lanes;
 
+  /**
+   * 没有完成的任务通道
+   */
   pingedLanes: Lanes;
   /**
    * 过期的任务通道
    */
   expiredLanes: Lanes;
 
+  /**
+   * 完成的任务通道
+   */
   finishedLanes: Lanes;
 }
 
@@ -175,6 +190,9 @@ export interface FiberRoot extends BaseFiberRootProperties {
 type BasicStateAction<S> = ((state: S) => S) | S;
 type Dispatch<A> = (action: A) => void;
 
+/**
+ * Hook 的类型定义
+ */
 export type Dispatcher = {
   readContext<T>(context: ReactContext<T>): T;
   useId(): string;
@@ -213,6 +231,9 @@ export type Dispatcher = {
   ): void;
 };
 
+/**
+ * useContext时全局对象依赖的类型定义
+ */
 export type ContextDependency<T> = {
   context: ReactContext<T>;
   next: ContextDependency<any> | null;
